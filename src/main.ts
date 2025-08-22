@@ -33,8 +33,14 @@ app.innerHTML = `
       <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20.49 4.51a2.828 2.828 0 1 1-4 4L8.5 16.51 4 21l-1.5-1.5L7.5 15l-4-4 4-4Z"/><path d="m15 5 4 4"/></svg>
     </button>
   </div>
+  <div class="color-picker-wrapper">
+    <input type="color" id="color-picker" value="#646cff">
+  </div>
 </div>
 `;
+
+// global styles
+const root = document.documentElement;
 
 const GRID_ROWS = 20;
 const GRID_COLS = 20;
@@ -46,6 +52,19 @@ gridContainer.style.setProperty('--grid-rows', String(GRID_ROWS));
 // button elements
 const drawBtn = document.getElementById('draw-btn') as HTMLButtonElement;
 const eraseBtn = document.getElementById('erase-btn') as HTMLButtonElement;
+const colorPicker = document.getElementById('color-picker') as HTMLInputElement;
+
+// State variables for drawing
+let isErasing     : Boolean = false;
+let isDrawing     : Boolean = false;
+
+let isMouseDown   : Boolean = false;
+let currentColor  : string = '#646cff'; // Default color
+if (!drawBtn || !eraseBtn || !colorPicker) {
+  throw new Error('Failed to find one or more control elements');
+}
+
+root.style.setProperty('--change_color', currentColor);
 
 drawBtn.addEventListener('click', () => {
   // Set the state
@@ -67,11 +86,19 @@ eraseBtn.addEventListener('click', () => {
   drawBtn.classList.remove('active');
 });
 
-// State variables for drawing
-let isErasing     : Boolean = false;
-let isDrawing     : Boolean = true;
-
-let isMouseDown   : Boolean = false;
+colorPicker.addEventListener('input', (e) => {
+  // Get the new color from the picker
+  const target = e.target as HTMLInputElement;
+  currentColor = target.value;
+  root.style.setProperty('--change_color', currentColor);
+  // Smart UX: If user picks a color, switch to drawing mode
+  if (!isDrawing) {
+    isDrawing = true;
+    isErasing = false;
+    drawBtn.classList.add('active');
+    eraseBtn.classList.remove('active');
+  }
+});
 
 // mouse down and mouse move work together to allow click and drag drawing
 gridContainer.addEventListener('mousedown', (e) => {

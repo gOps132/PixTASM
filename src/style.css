@@ -11,6 +11,8 @@ s:root {
   text-rendering: optimizeLegibility;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+
+  --change_color: #646cff;
 }
 
 body {
@@ -70,12 +72,12 @@ p {
 }
 
 .cell:hover {
-  background-color: #5a5a5a;
+  background-color: var(--change_color);
 }
 
 .cell.selected {
-  background-color: #646cff;
-  border-color: #535bf2;
+  background-color: var(--change_color);
+  border-color: var(--change_color);
 }
 
 
@@ -89,7 +91,7 @@ p {
 
 /* Base style for each button */
 .control-btn {
-  background-color: transparent;
+  /* background-color: transparent; */
   border: 2px solid #555;
   border-radius: 8px;
   padding: 0.5rem;
@@ -103,7 +105,7 @@ p {
 .control-btn svg {
   width: 24px;
   height: 24px;
-  stroke: currentColor; /* The magic: SVG color inherits from button's color property */
+  /* stroke: currentColor; */
 }
 
 /* Style for when you hover over a button */
@@ -114,7 +116,7 @@ p {
 
 /* Style for the currently active button */
 .control-btn.active {
-  background-color: #646cff;
-  border-color: #535bf2;
+  background-color: var(--change_color);
+  border-color: var(--change_color);
   color: #fff;
 }
