@@ -1,0 +1,120 @@
+s:root {
+  font-family: system-ui, Avenir, Helvetica, Arial, sans-serif;
+  line-height: 1.5;
+  font-weight: 400;
+
+  color-scheme: light dark;
+  /* color: rgba(255, 255, 255, 0.87);
+  background-color: #dfdfdf; */
+
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+body {
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  /* place-items: center; */
+  /* justify-content: space-around; */
+
+  /* min-height: 100%;
+  max-height: 100vh; */
+}
+
+#app {
+  /* height: 100vh; */
+  margin: 0 auto;
+  padding: 2rem;
+  text-align: center;
+  min-width: 80vh;
+  width: 100%;
+  height: 100%;
+  /* overflow-y: scroll; */
+}
+
+h1 {
+  font-size: 2em;
+  margin-bottom: 0.5em;
+}
+
+p {
+  /* color: #888; */
+  margin-bottom: 2em;
+}
+
+.grid-container {
+  display: grid;
+  grid-template-columns: repeat(var(--grid-cols, 30), 1fr);
+  margin: 0 auto;
+
+  max-width: 50vw;
+  max-height: 50vh;
+
+  user-select: none; /* Prevents text selection during drag */
+  /* border: 1px solid #444; */
+  /* padding: 3px; */
+  /* background-color: #545353; */
+}
+
+.cell {
+  width: 100%;
+  /* Maintain aspect ratio */
+  padding-bottom: 100%; 
+  /* background-color: #444; */
+  border: 1px solid #555;
+  cursor: pointer;
+  position: relative;
+}
+
+.cell:hover {
+  background-color: #5a5a5a;
+}
+
+.cell.selected {
+  background-color: #646cff;
+  border-color: #535bf2;
+}
+
+
+/* Container for the buttons */
+.controls {
+  margin-bottom: 1rem;
+  display: flex;
+  gap: 0.5rem; /* Space between buttons */
+  justify-content: center;
+}
+
+/* Base style for each button */
+.control-btn {
+  background-color: transparent;
+  border: 2px solid #555;
+  border-radius: 8px;
+  padding: 0.5rem;
+  cursor: pointer;
+  line-height: 0; /* Helps align the SVG inside */
+  transition: all 0.2s ease-in-out;
+  color: #888; /* SVG will inherit this color */
+}
+
+/* Style for the SVG icon itself */
+.control-btn svg {
+  width: 24px;
+  height: 24px;
+  stroke: currentColor; /* The magic: SVG color inherits from button's color property */
+}
+
+/* Style for when you hover over a button */
+.control-btn:hover {
+  background-color: #5a5a5a;
+  color: #fff;
+}
+
+/* Style for the currently active button */
+.control-btn.active {
+  background-color: #646cff;
+  border-color: #535bf2;
+  color: #fff;
+}
