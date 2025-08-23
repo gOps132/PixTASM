@@ -53,7 +53,7 @@ renderc MACRO char
 ENDM
 .model small
 .code
-.stack 1000h
+.stack 100h
 start :
     ; Set to video mode 
 
@@ -86,17 +86,17 @@ function generateTASMCode(gridData: (number | null)[][]): string {
 }
 
 // --- STATE MANAGEMENT ---
-let GRID_ROWS : number = 20;
-let GRID_COLS : number = 20;
+let GRID_ROWS: number = 20;
+let GRID_COLS: number = 20;
 
-const MAX_ROWS : number = 50;
-const MAX_COLS : number = 50;
-const MIN_ROWS : number = 1;
-const MIN_COLS : number = 1;
+const MAX_GRID: number = 30*30;
 
-let isErasing : boolean = false;
-let isDrawing : boolean = false;
-let isMouseDown : boolean = false;
+const MIN_ROWS: number = 1;
+const MIN_COLS: number = 1;
+
+let isErasing: boolean = false;
+let isDrawing: boolean = false;
+let isMouseDown: boolean = false;
 
 // 8-Bit "Color" State
 let currentBgIndex = 1; // Default: black background
@@ -122,35 +122,36 @@ const colsInput = document.getElementById('cols-input') as HTMLInputElement;
 const resizeBtn = document.getElementById('resize-btn') as HTMLButtonElement;
 
 function createGrid(rows: number, cols: number) {
-  GRID_ROWS = rows;
-  GRID_COLS = cols;
+    middle = '';
+    GRID_ROWS = rows;
+    GRID_COLS = cols;
 
-  gridContainer.innerHTML = '';
-  
-  cellElements = [];
-  gridData = [];
+    gridContainer.innerHTML = '';
 
-  gridContainer.style.setProperty('--grid-cols', String(cols));
-  gridContainer.style.setProperty('--grid-rows', String(rows));
+    cellElements = [];
+    gridData = [];
 
-  for (let i = 0; i < rows; i++) {
-    gridData[i] = [];
-    cellElements[i] = [];
-    for (let j = 0; j < cols; j++) {
-      const cell = document.createElement('div');
-      cell.className = 'cell';
-      cell.dataset.row = String(i);
-      cell.dataset.col = String(j);
-      
-      gridContainer.appendChild(cell);
-      cellElements[i][j] = cell;
-      gridData[i][j] = null;
+    gridContainer.style.setProperty('--grid-cols', String(cols));
+    gridContainer.style.setProperty('--grid-rows', String(rows));
+
+    for (let i = 0; i < rows; i++) {
+        gridData[i] = [];
+        cellElements[i] = [];
+        for (let j = 0; j < cols; j++) {
+            const cell = document.createElement('div');
+            cell.className = 'cell';
+            cell.dataset.row = String(i);
+            cell.dataset.col = String(j);
+
+            gridContainer.appendChild(cell);
+            cellElements[i][j] = cell;
+            gridData[i][j] = null;
+        }
     }
-  }
-  
-  console.log(`Grid created with ${rows} rows and ${cols} columns.`);
-  
-  // localStorage.removeItem(STORAGE_KEY);
+
+    console.log(`Grid created with ${rows} rows and ${cols} columns.`);
+
+    // localStorage.removeItem(STORAGE_KEY);
 }
 
 /**
@@ -201,8 +202,8 @@ function applyDrawing(cell: HTMLDivElement) {
 createGrid(GRID_ROWS, GRID_COLS);
 app.appendChild(gridContainer);
 createColorPanel(bgColorPanel, BACKGROUND_PALETTE, (selectedIndex) => {
-  currentBgIndex = selectedIndex;
-  console.log(`Background color index set to: ${currentBgIndex}`);
+    currentBgIndex = selectedIndex;
+    console.log(`Background color index set to: ${currentBgIndex}`);
 });
 
 // ----------------------
@@ -210,64 +211,64 @@ createColorPanel(bgColorPanel, BACKGROUND_PALETTE, (selectedIndex) => {
 
 // --- COLOR PANEL MANAGEMENT ---
 function createColorPanel(
-    panel: HTMLDivElement, 
-    palette: readonly string[], 
+    panel: HTMLDivElement,
+    palette: readonly string[],
     onColorSelect: (index: number) => void) {
-    
-  panel.innerHTML = ''; // Clear any existing swatches
-  
-  palette.forEach((color, index) => {
-    const swatch = document.createElement('div');
-    swatch.className = 'color-swatch';
-    swatch.style.backgroundColor = color;
-    swatch.dataset.colorIndex = String(index);
 
-    // Set the initial selected swatch
-    if (index === currentBgIndex) {
-      swatch.classList.add('selected');
-    }
-    
-    swatch.addEventListener('click', (e) => {
-        // Update the state by calling the callback
-        onColorSelect(index);
-        
-        // Update the visual selection
-        panel.querySelectorAll('.color-swatch').forEach((sw) => {
-            sw.classList.remove('selected')
+    panel.innerHTML = ''; // Clear any existing swatches
+
+    palette.forEach((color, index) => {
+        const swatch = document.createElement('div');
+        swatch.className = 'color-swatch';
+        swatch.style.backgroundColor = color;
+        swatch.dataset.colorIndex = String(index);
+
+        // Set the initial selected swatch
+        if (index === currentBgIndex) {
+            swatch.classList.add('selected');
+        }
+
+        swatch.addEventListener('click', (e) => {
+            // Update the state by calling the callback
+            onColorSelect(index);
+
+            // Update the visual selection
+            panel.querySelectorAll('.color-swatch').forEach((sw) => {
+                sw.classList.remove('selected')
+            });
+
+            swatch.classList.add('selected');
+
+            // Hide the panel after selection
+            panel.classList.remove('visible');
         });
 
-        swatch.classList.add('selected');
-        
-        // Hide the panel after selection
-        panel.classList.remove('visible');        
+        panel.appendChild(swatch);
     });
-    
-    panel.appendChild(swatch);
-  });
 }
 
 // close color panel when clicking outside
 window.addEventListener('click', () => {
-  if (bgColorPanel.classList.contains('visible')) {
-    bgColorPanel.classList.remove('visible');
-  }
+    if (bgColorPanel.classList.contains('visible')) {
+        bgColorPanel.classList.remove('visible');
+    }
 });
 
 // --- EVENT LISTENERS ---
 
 resizeBtn.addEventListener('click', () => {
-  const newRows = parseInt(rowsInput.value, 10);
-  const newCols = parseInt(colsInput.value, 10);
+    const newRows = parseInt(rowsInput.value, 10);
+    const newCols = parseInt(colsInput.value, 10);
 
-  if (isNaN(newRows) || isNaN(newCols) || newRows < MIN_ROWS || newCols < MIN_COLS || newRows > MAX_ROWS || newCols > MAX_COLS) {
-    alert('Please enter valid numbers for rows and columns (1-50).');
-    return;
-  }
-  
-  localStorage.setItem('gridRows', String(newRows));
-  localStorage.setItem('gridCols', String(newCols));
+    if (isNaN(newRows) || isNaN(newCols) || newRows < MIN_ROWS || newCols < MIN_COLS || newRows*newCols > MAX_GRID) {
+        alert(`Please grid within (1-${MAX_GRID}) cells.`);
+        return;
+    }
 
-  createGrid(newRows, newCols);
+    localStorage.setItem('gridRows', String(newRows));
+    localStorage.setItem('gridCols', String(newCols));
+
+    createGrid(newRows, newCols);
 });
 
 drawBtn.addEventListener('click', () => {
