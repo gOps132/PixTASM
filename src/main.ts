@@ -20,6 +20,11 @@ app.innerHTML = `
 <div>
     <div id="bg-color-panel" class="color-panel"></div>
     <div class="controls">
+        <div class="grid-size-controls">
+            <input type="number" id="rows-input" class="size-input" value="10" min="1" max="50">
+            <input type="number" id="cols-input" class="size-input" value="10" min="1" max="50">
+            <button id="resize-btn" class="control-btn">Resize</button>
+        </div>
         <button id="draw-btn" class="control-btn" aria-label="Draw">
             <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 3a2.828 2.828 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z"></path></svg>
         </button>
@@ -48,7 +53,7 @@ renderc MACRO char
 ENDM
 .model small
 .code
-.stack 100
+.stack 1000h
 start :
     ; Set to video mode 
 
@@ -81,20 +86,25 @@ function generateTASMCode(gridData: (number | null)[][]): string {
 }
 
 // --- STATE MANAGEMENT ---
-let GRID_ROWS = 10;
-let GRID_COLS = 10;
+let GRID_ROWS : number = 20;
+let GRID_COLS : number = 20;
 
-let isErasing = false;
-let isDrawing = false;
-let isMouseDown = false;
+const MAX_ROWS : number = 50;
+const MAX_COLS : number = 50;
+const MIN_ROWS : number = 1;
+const MIN_COLS : number = 1;
+
+let isErasing : boolean = false;
+let isDrawing : boolean = false;
+let isMouseDown : boolean = false;
 
 // 8-Bit "Color" State
 let currentBgIndex = 1; // Default: black background
 let currentFgIndex = 15; // Default: White foreground
 let isBlinkEnabled = false; // Default: Steady
 
-const cellElements: HTMLDivElement[][] = [];
-const gridData: (number | null)[][] = [];
+let cellElements: HTMLDivElement[][] = [];
+let gridData: (number | null)[][] = [];
 // ------------------------
 
 const gridContainer = document.createElement('div');
@@ -106,6 +116,42 @@ const drawBtn = document.getElementById('draw-btn') as HTMLButtonElement;
 const eraseBtn = document.getElementById('erase-btn') as HTMLButtonElement;
 const bgColorPanel = document.getElementById('bg-color-panel') as HTMLDivElement;
 const renderBtn = document.getElementById('render-btn') as HTMLButtonElement;
+
+const rowsInput = document.getElementById('rows-input') as HTMLInputElement;
+const colsInput = document.getElementById('cols-input') as HTMLInputElement;
+const resizeBtn = document.getElementById('resize-btn') as HTMLButtonElement;
+
+function createGrid(rows: number, cols: number) {
+  GRID_ROWS = rows;
+  GRID_COLS = cols;
+
+  gridContainer.innerHTML = '';
+  
+  cellElements = [];
+  gridData = [];
+
+  gridContainer.style.setProperty('--grid-cols', String(cols));
+  gridContainer.style.setProperty('--grid-rows', String(rows));
+
+  for (let i = 0; i < rows; i++) {
+    gridData[i] = [];
+    cellElements[i] = [];
+    for (let j = 0; j < cols; j++) {
+      const cell = document.createElement('div');
+      cell.className = 'cell';
+      cell.dataset.row = String(i);
+      cell.dataset.col = String(j);
+      
+      gridContainer.appendChild(cell);
+      cellElements[i][j] = cell;
+      gridData[i][j] = null;
+    }
+  }
+  
+  console.log(`Grid created with ${rows} rows and ${cols} columns.`);
+  
+  // localStorage.removeItem(STORAGE_KEY);
+}
 
 /**
  * Renders a single cell's appearance based on its 8-bit value.
@@ -152,67 +198,17 @@ function applyDrawing(cell: HTMLDivElement) {
 
 // --- INITIALIZATION --- 
 
-// Create the grid and initialize data models
-for (let i = 0; i < GRID_ROWS; i++) {
-    gridData[i] = [];
-    cellElements[i] = [];
-    for (let j = 0; j < GRID_COLS; j++) {
-        const cell = document.createElement('div');
-        cell.className = 'cell';
-        cell.dataset.row = String(i);
-        cell.dataset.col = String(j);
-
-        gridContainer.appendChild(cell);
-        cellElements[i][j] = cell; // Store the element reference
-        gridData[i][j] = null;      // Initialize data as empty
-    }
-}
+createGrid(GRID_ROWS, GRID_COLS);
 app.appendChild(gridContainer);
 createColorPanel(bgColorPanel, BACKGROUND_PALETTE, (selectedIndex) => {
   currentBgIndex = selectedIndex;
   console.log(`Background color index set to: ${currentBgIndex}`);
 });
 
-// --- EVENT LISTENERS ---
-
-// Tool selection
-drawBtn.addEventListener('click', () => {
-    isDrawing = true;
-    isErasing = false;
-    drawBtn.classList.add('active');
-    eraseBtn.classList.remove('active');
-});
-
-eraseBtn.addEventListener('click', () => {
-    isDrawing = false;
-    isErasing = true;
-    eraseBtn.classList.add('active');
-    drawBtn.classList.remove('active');
-});
+// ----------------------
 
 
-gridContainer.addEventListener('mousedown', (e) => {
-    if (!(e.target instanceof HTMLDivElement)) return;
-    e.preventDefault();
-    isMouseDown = true;
-    applyDrawing(e.target);
-});
-
-renderBtn.addEventListener('click', () => {
-    const tasmCode = generateTASMCode(gridData);
-    navigator.clipboard.writeText(tasmCode).then(() => {
-        alert('TASM code copied to clipboard!');
-    }).catch(err => {
-        console.error('Failed to copy TASM code:', err);
-        alert('Failed to copy TASM code. Check console for details.');
-    });
-});
-
-bgColorPanel.addEventListener('click', (e) => {
-    bgColorPanel.classList.toggle('visible');
-    e.stopPropagation();
-});
-
+// --- COLOR PANEL MANAGEMENT ---
 function createColorPanel(
     panel: HTMLDivElement, 
     palette: readonly string[], 
@@ -255,6 +251,55 @@ window.addEventListener('click', () => {
   if (bgColorPanel.classList.contains('visible')) {
     bgColorPanel.classList.remove('visible');
   }
+});
+
+// --- EVENT LISTENERS ---
+
+resizeBtn.addEventListener('click', () => {
+  const newRows = parseInt(rowsInput.value, 10);
+  const newCols = parseInt(colsInput.value, 10);
+
+  if (isNaN(newRows) || isNaN(newCols) || newRows < MIN_ROWS || newCols < MIN_COLS || newRows > MAX_ROWS || newCols > MAX_COLS) {
+    alert('Please enter valid numbers for rows and columns (1-50).');
+    return;
+  }
+  
+  localStorage.setItem('gridRows', String(newRows));
+  localStorage.setItem('gridCols', String(newCols));
+
+  createGrid(newRows, newCols);
+});
+
+drawBtn.addEventListener('click', () => {
+    isDrawing = true;
+    isErasing = false;
+    drawBtn.classList.add('active');
+    eraseBtn.classList.remove('active');
+});
+
+eraseBtn.addEventListener('click', () => {
+    isDrawing = false;
+    isErasing = true;
+    eraseBtn.classList.add('active');
+    drawBtn.classList.remove('active');
+});
+
+
+gridContainer.addEventListener('mousedown', (e) => {
+    if (!(e.target instanceof HTMLDivElement)) return;
+    e.preventDefault();
+    isMouseDown = true;
+    applyDrawing(e.target);
+});
+
+renderBtn.addEventListener('click', () => {
+    const tasmCode = generateTASMCode(gridData);
+    navigator.clipboard.writeText(tasmCode).then(() => {
+        alert('TASM code copied to clipboard!');
+    }).catch(err => {
+        console.error('Failed to copy TASM code:', err);
+        alert('Failed to copy TASM code. Check console for details.');
+    });
 });
 
 gridContainer.addEventListener('mousemove', (e) => {

@@ -68,7 +68,7 @@ p {
   /* Maintain aspect ratio */
   padding-bottom: 100%;
   /* background-color: #444; */
-  border: 1px solid #555;
+  border: 0.1px solid #555;
   cursor: pointer;
   position: relative;
 }
@@ -90,11 +90,6 @@ p {
 
 .cell.blinking {
   animation: blink-animation 1s step-end infinite;
-}
-
-.cell {
-  /* Add a thicker border so the foreground color is visible */
-  border: 2px solid #555;
 }
 
 /* Container for the buttons */
@@ -122,8 +117,8 @@ p {
 
 /* Style for the SVG icon itself */
 .control-btn svg {
-  width: 24px;
-  height: 24px;
+  width: 40px;
+  height: 30px;
   /* stroke: currentColor; */
 }
 
@@ -173,9 +168,7 @@ p {
   flex-wrap: wrap;
   gap: 6px;
 
-  /* Adjust width to control how many swatches per row */
   width: 90px;
-  /* e.g., for 2 swatches per row */
 }
 
 .color-panel.visible {
@@ -199,6 +192,36 @@ p {
   border-color: #fff;
   box-shadow: 0 0 0 2px #fff;
   /* A clear outer glow */
+}
+
+.grid-size-controls {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  margin-top: 1rem;
+}
+
+.size-input {
+  width: 3rem;
+  padding: 0.5rem;
+  height: 30px;
+  background-color: #222;
+  color: #eee;
+  border: 2px solid #555;
+  border-radius: 8px;
+  font-family: inherit;
+  text-align: center;
+}
+
+#resize-btn {
+  padding: 1rem;
+}
+
+.size-input::-webkit-outer-spin-button,
+.size-input::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
 }
 
 /* TODO: SVG ICON MUST CORRESPOND TO CURRENT SELECTED COLOR */
