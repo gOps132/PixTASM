@@ -24,6 +24,7 @@ body {
 
   /* min-height: 100%;
   max-height: 100vh; */
+  background-color: #1e1e1e;
 }
 
 #app {
@@ -55,7 +56,8 @@ p {
   max-width: 50vw;
   max-height: 50vh;
 
-  user-select: none; /* Prevents text selection during drag */
+  user-select: none;
+  /* Prevents text selection during drag */
   /* border: 1px solid #444; */
   /* padding: 3px; */
   /* background-color: #545353; */
@@ -64,7 +66,7 @@ p {
 .cell {
   width: 100%;
   /* Maintain aspect ratio */
-  padding-bottom: 100%; 
+  padding-bottom: 100%;
   /* background-color: #444; */
   border: 1px solid #555;
   cursor: pointer;
@@ -75,17 +77,32 @@ p {
   background-color: var(--change_color);
 }
 
-.cell.selected {
+/* .cell.selected {
   background-color: var(--change_color);
   border-color: var(--change_color);
+} */
+
+@keyframes blink-animation {
+  50% {
+    opacity: 0.3;
+  }
 }
 
+.cell.blinking {
+  animation: blink-animation 1s step-end infinite;
+}
+
+.cell {
+  /* Add a thicker border so the foreground color is visible */
+  border: 2px solid #555;
+}
 
 /* Container for the buttons */
 .controls {
   margin-bottom: 1rem;
   display: flex;
-  gap: 0.5rem; /* Space between buttons */
+  gap: 0.5rem;
+  /* Space between buttons */
   justify-content: center;
 }
 
@@ -96,9 +113,11 @@ p {
   border-radius: 8px;
   padding: 0.5rem;
   cursor: pointer;
-  line-height: 0; /* Helps align the SVG inside */
+  line-height: 0;
+  /* Helps align the SVG inside */
   transition: all 0.2s ease-in-out;
-  color: #888; /* SVG will inherit this color */
+  color: #888;
+  /* SVG will inherit this color */
 }
 
 /* Style for the SVG icon itself */
@@ -120,3 +139,66 @@ p {
   border-color: var(--change_color);
   color: #fff;
 }
+
+#color-swatch {
+  width: 40px;
+  /* Match your picker size */
+  height: 40px;
+  border: 2px solid #555;
+  border-radius: 8px;
+  margin-left: 0.5rem;
+  background-color: #646cff;
+  /* Initial color */
+}
+
+
+/* PALLETE SHITTT */
+.color-panel {
+  display: none;
+  /* Hidden by default */
+  position: fixed;
+
+  top: 50%;
+  left: 20px;
+  transform: translateY(-50%);
+  /* This vertically centers it perfectly */
+
+  background-color: #2e2e2e;
+  border: 1px solid #555;
+  border-radius: 8px;
+  padding: 8px;
+  z-index: 10;
+
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+
+  /* Adjust width to control how many swatches per row */
+  width: 90px;
+  /* e.g., for 2 swatches per row */
+}
+
+.color-panel.visible {
+  display: flex;
+}
+
+.color-swatch {
+  width: 32px;
+  height: 32px;
+  border-radius: 6px;
+  border: 2px solid #555;
+  cursor: pointer;
+  transition: transform 0.1s ease;
+}
+
+.color-swatch:hover {
+  transform: scale(1.1);
+}
+
+.color-swatch.selected {
+  border-color: #fff;
+  box-shadow: 0 0 0 2px #fff;
+  /* A clear outer glow */
+}
+
+/* TODO: SVG ICON MUST CORRESPOND TO CURRENT SELECTED COLOR */

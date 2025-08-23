@@ -1,145 +1,268 @@
-import './style.css'
-import typescriptLogo from './typescript.svg'
-import viteLogo from '/vite.svg'
-import { setupCounter } from './counter.ts'
-
-import colorSVG from '../public/color.svg'
-
 /**
  * TODO:
- *  [ ] basic drawing functionality
+ *  [/] basic drawing functionality
  *  [ ] grid size selection
  *  [ ] grid size persistence
- *  [ ] erasing functionality
- *  [ ] color selection
+ *  [/] erasing functionality
+ *  [/] color selection
  *  [ ] save/load functionality
- *  [ ] export functionality (tasm)
+ *  [/] export functionality (tasm)
  */
 
-const app = document.getElementById('app')!
-if (!app) {
-  throw new Error('Failed to find the app element')
-}
+import './style.css';
+import { decodeCellData, encodeCellData, BACKGROUND_PALETTE } from './color';
+
+// --- CONFIG & DOM ELEMENTS ---
+const app = document.getElementById('app')!;
+if (!app) throw new Error('Failed to find the app element');
 
 app.innerHTML = `
 <div>
-  <div class="controls">
-    <button id="draw-btn" class="control-btn active" aria-label="Draw">
-      <!-- Paste Pencil SVG Here -->
-      <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 3a2.828 2.828 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z"></path></svg>
-    </button>
-    <button id="erase-btn" class="control-btn" aria-label="Erase">
-      <!-- Paste Eraser SVG Here -->
-      <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20.49 4.51a2.828 2.828 0 1 1-4 4L8.5 16.51 4 21l-1.5-1.5L7.5 15l-4-4 4-4Z"/><path d="m15 5 4 4"/></svg>
-    </button>
-  </div>
-  <div class="color-picker-wrapper">
-    <input type="color" id="color-picker" value="#646cff">
-  </div>
+    <div id="bg-color-panel" class="color-panel"></div>
+    <div class="controls">
+        <button id="draw-btn" class="control-btn" aria-label="Draw">
+            <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 3a2.828 2.828 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z"></path></svg>
+        </button>
+        <button id="erase-btn" class="control-btn" aria-label="Erase">
+            <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20.49 4.51a2.828 2.828 0 1 1-4 4L8.5 16.51 4 21l-1.5-1.5L7.5 15l-4-4 4-4Z"/><path d="m15 5 4 4"/></svg>
+        </button>
+        <button id="render-btn" class="control-btn" aria-label="Render and Copy TASM">
+            <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="16 18 22 12 16 6"></polyline><polyline points="8 6 2 12 8 18"></polyline></svg>
+        </button>
+    </div>
 </div>
 `;
 
-// global styles
-const root = document.documentElement;
+let start = `
+putc MACRO char
+    mov ah, 02h
+    mov dl, char
+    int 21h
+ENDM
+renderc MACRO char
+    mov AH, 09h 
+    mov bl, char
+    mov cx, 1 
+    int 10h
+    putc ' '
+ENDM
+.model small
+.code
+.stack 100
+start :
+    ; Set to video mode 
 
-const GRID_ROWS = 20;
-const GRID_COLS = 20;
-const gridContainer = document.createElement('div')
-gridContainer.className = 'grid-container'
+    mov ah, 00h
+    mov al, 03h
+    int 10h\n
+`;
+let middle = ``
+let end = `
+int 27h ; terminate
+end start ; end program
+`
+
+function generateTASMCode(gridData: (number | null)[][]): string {
+    let code = start;
+    for (let row = 0; row < gridData.length; row++) {
+        for (let col = 0; col < gridData[row].length; col++) {
+            let cellValue = gridData[row][col];
+            if (cellValue === null) cellValue = 0;
+            middle += `\trenderc ${cellValue.toString(16)}h\n`;
+            middle += `\trenderc ${cellValue.toString(16)}h\n`;
+        }
+        // add newline after each row
+        middle += `\n\tputc 0ah\n\n`;
+    }
+    code += middle + end;
+    // debug
+    console.log('Generated TASM Code:\n', code);
+    return code;
+}
+
+// --- STATE MANAGEMENT ---
+let GRID_ROWS = 10;
+let GRID_COLS = 10;
+
+let isErasing = false;
+let isDrawing = false;
+let isMouseDown = false;
+
+// 8-Bit "Color" State
+let currentBgIndex = 1; // Default: black background
+let currentFgIndex = 15; // Default: White foreground
+let isBlinkEnabled = false; // Default: Steady
+
+const cellElements: HTMLDivElement[][] = [];
+const gridData: (number | null)[][] = [];
+// ------------------------
+
+const gridContainer = document.createElement('div');
+gridContainer.className = 'grid-container';
 gridContainer.style.setProperty('--grid-cols', String(GRID_COLS));
 gridContainer.style.setProperty('--grid-rows', String(GRID_ROWS));
 
-// button elements
 const drawBtn = document.getElementById('draw-btn') as HTMLButtonElement;
 const eraseBtn = document.getElementById('erase-btn') as HTMLButtonElement;
-const colorPicker = document.getElementById('color-picker') as HTMLInputElement;
+const bgColorPanel = document.getElementById('bg-color-panel') as HTMLDivElement;
+const renderBtn = document.getElementById('render-btn') as HTMLButtonElement;
 
-// State variables for drawing
-let isErasing     : Boolean = false;
-let isDrawing     : Boolean = false;
-
-let isMouseDown   : Boolean = false;
-let currentColor  : string = '#646cff'; // Default color
-if (!drawBtn || !eraseBtn || !colorPicker) {
-  throw new Error('Failed to find one or more control elements');
+/**
+ * Renders a single cell's appearance based on its 8-bit value.
+ */
+function renderCell(cell: HTMLDivElement, value: number | null) {
+    if (value === null) {
+        // Style for an erased cell
+        cell.style.backgroundColor = '';
+        cell.style.borderColor = '#555';
+        cell.classList.remove('blinking');
+        cell.classList.remove('selected');
+    } else {
+        // Style for a drawn cell
+        const decoded = decodeCellData(value);
+        cell.style.backgroundColor = decoded.backgroundColor;
+        cell.style.borderColor = decoded.foregroundColor; // Use border for foreground
+        cell.classList.toggle('blinking', decoded.isBlinking);
+        cell.classList.add('selected');
+    }
 }
 
-root.style.setProperty('--change_color', currentColor);
+/**
+ * Updates the data model and re-renders a cell based on the current tool.
+ */
+function applyDrawing(cell: HTMLDivElement) {
+    const row = parseInt(cell.dataset.row!);
+    const col = parseInt(cell.dataset.col!);
 
+    let newValue: number | null = null;
+
+    if (isErasing) {
+        newValue = null;
+    } else {
+        newValue = encodeCellData({
+            bgIndex: currentBgIndex,
+            fgIndex: currentFgIndex,
+            isBlinking: isBlinkEnabled
+        });
+    }
+    gridData[row][col] = newValue;
+    renderCell(cell, newValue);
+}
+
+
+// --- INITIALIZATION --- 
+
+// Create the grid and initialize data models
+for (let i = 0; i < GRID_ROWS; i++) {
+    gridData[i] = [];
+    cellElements[i] = [];
+    for (let j = 0; j < GRID_COLS; j++) {
+        const cell = document.createElement('div');
+        cell.className = 'cell';
+        cell.dataset.row = String(i);
+        cell.dataset.col = String(j);
+
+        gridContainer.appendChild(cell);
+        cellElements[i][j] = cell; // Store the element reference
+        gridData[i][j] = null;      // Initialize data as empty
+    }
+}
+app.appendChild(gridContainer);
+createColorPanel(bgColorPanel, BACKGROUND_PALETTE, (selectedIndex) => {
+  currentBgIndex = selectedIndex;
+  console.log(`Background color index set to: ${currentBgIndex}`);
+});
+
+// --- EVENT LISTENERS ---
+
+// Tool selection
 drawBtn.addEventListener('click', () => {
-  // Set the state
-  isDrawing = true;
-  isErasing = false;
-  
-  // Update the UI
-  drawBtn.classList.add('active');
-  eraseBtn.classList.remove('active');
-});
-
-eraseBtn.addEventListener('click', () => {
-  // Set the state
-  isDrawing = false;
-  isErasing = true;
-  
-  // Update the UI
-  eraseBtn.classList.add('active');
-  drawBtn.classList.remove('active');
-});
-
-colorPicker.addEventListener('input', (e) => {
-  // Get the new color from the picker
-  const target = e.target as HTMLInputElement;
-  currentColor = target.value;
-  root.style.setProperty('--change_color', currentColor);
-  // Smart UX: If user picks a color, switch to drawing mode
-  if (!isDrawing) {
     isDrawing = true;
     isErasing = false;
     drawBtn.classList.add('active');
     eraseBtn.classList.remove('active');
-  }
 });
 
-// mouse down and mouse move work together to allow click and drag drawing
+eraseBtn.addEventListener('click', () => {
+    isDrawing = false;
+    isErasing = true;
+    eraseBtn.classList.add('active');
+    drawBtn.classList.remove('active');
+});
+
+
 gridContainer.addEventListener('mousedown', (e) => {
-  isMouseDown = true;
-  e.preventDefault();
-  const target = e.target as HTMLDivElement;
-  if (target.classList.contains('cell')) {
-    if (isErasing && target.classList.contains('selected')) {
-      target.classList.remove('selected');
-    } else if (isDrawing && !target.classList.contains('selected')) {
-      target.classList.add('selected');
+    if (!(e.target instanceof HTMLDivElement)) return;
+    e.preventDefault();
+    isMouseDown = true;
+    applyDrawing(e.target);
+});
+
+renderBtn.addEventListener('click', () => {
+    const tasmCode = generateTASMCode(gridData);
+    navigator.clipboard.writeText(tasmCode).then(() => {
+        alert('TASM code copied to clipboard!');
+    }).catch(err => {
+        console.error('Failed to copy TASM code:', err);
+        alert('Failed to copy TASM code. Check console for details.');
+    });
+});
+
+bgColorPanel.addEventListener('click', (e) => {
+    bgColorPanel.classList.toggle('visible');
+    e.stopPropagation();
+});
+
+function createColorPanel(
+    panel: HTMLDivElement, 
+    palette: readonly string[], 
+    onColorSelect: (index: number) => void) {
+    
+  panel.innerHTML = ''; // Clear any existing swatches
+  
+  palette.forEach((color, index) => {
+    const swatch = document.createElement('div');
+    swatch.className = 'color-swatch';
+    swatch.style.backgroundColor = color;
+    swatch.dataset.colorIndex = String(index);
+
+    // Set the initial selected swatch
+    if (index === currentBgIndex) {
+      swatch.classList.add('selected');
     }
+    
+    swatch.addEventListener('click', (e) => {
+        // Update the state by calling the callback
+        onColorSelect(index);
+        
+        // Update the visual selection
+        panel.querySelectorAll('.color-swatch').forEach((sw) => {
+            sw.classList.remove('selected')
+        });
+
+        swatch.classList.add('selected');
+        
+        // Hide the panel after selection
+        panel.classList.remove('visible');        
+    });
+    
+    panel.appendChild(swatch);
+  });
+}
+
+// close color panel when clicking outside
+window.addEventListener('click', () => {
+  if (bgColorPanel.classList.contains('visible')) {
+    bgColorPanel.classList.remove('visible');
   }
 });
 
 gridContainer.addEventListener('mousemove', (e) => {
-  if (!isMouseDown) return;
-  e.preventDefault();
-  const target = e.target as HTMLDivElement;
-  if (target.classList.contains('cell')) {
-    if (isErasing && target.classList.contains('selected')) {
-      target.classList.remove('selected');
-    } else if (isDrawing && !target.classList.contains('selected')) {
-      target.classList.add('selected');
-    }
-  }
+    if (!isMouseDown || !(e.target instanceof HTMLDivElement)) return;
+    e.preventDefault();
+    applyDrawing(e.target);
 });
 
-gridContainer.addEventListener('mouseup', () => {
-  isMouseDown = false;
+window.addEventListener('mouseup', () => {
+    isMouseDown = false;
 });
-
-// Create and append grid cells
-for (let i = 0; i < GRID_ROWS; i++) {
-  for (let j = 0; j < GRID_COLS; j++) {
-    const cell = document.createElement('div');
-    cell.className = 'cell';
-    cell.dataset.row = String(i);
-    cell.dataset.col = String(j);
-    gridContainer.appendChild(cell);
-  }
-}
-
-app.appendChild(gridContainer);
