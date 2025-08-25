@@ -1,12 +1,15 @@
 /**
  * TODO:
  *  [/] basic drawing functionality
- *  [ ] grid size selection
+ *  [/] grid size selection
  *  [ ] grid size persistence
  *  [/] erasing functionality
  *  [/] color selection
  *  [ ] save/load functionality
  *  [/] export functionality (tasm)
+ *  [ ] cells should be 2x1 (2 horizontal cells per character)
+ *  [ ] Add ascii characters to blocks (finally can use the foreground color)
+ *      * maybe a toggle button to switch between ascii and block mode
  */
 
 import './style.css';
@@ -56,14 +59,14 @@ ENDM
 .stack 100h
 start :
     ; Set to video mode 
-
     mov ah, 00h
     mov al, 03h
     int 10h\n
 `;
 let middle = ``
 let end = `
-int 27h ; terminate
+    mov ax, 4c00h ; exit dos
+    int 27h ; terminate
 end start ; end program
 `
 
@@ -73,8 +76,11 @@ function generateTASMCode(gridData: (number | null)[][]): string {
         for (let col = 0; col < gridData[row].length; col++) {
             let cellValue = gridData[row][col];
             if (cellValue === null) cellValue = 0;
-            middle += `\trenderc ${cellValue.toString(16)}h\n`;
-            middle += `\trenderc ${cellValue.toString(16)}h\n`;
+            // each cell is rendered twice for 2x1 aspect ratio
+            let tmp = cellValue.toString(16);
+            if (tmp == 'f') tmp = '0';
+            middle += `\trenderc ${tmp}h\n`;
+            middle += `\trenderc ${tmp}h\n`;
         }
         // add newline after each row
         middle += `\n\tputc 0ah\n\n`;
