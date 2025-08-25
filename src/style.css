@@ -82,7 +82,7 @@ p {
   border-color: var(--change_color);
 } */
 
-@keyframes blink-animation {
+/* @keyframes blink-animation {
   50% {
     opacity: 0.3;
   }
@@ -90,7 +90,7 @@ p {
 
 .cell.blinking {
   animation: blink-animation 1s step-end infinite;
-}
+} */
 
 /* Container for the buttons */
 .controls {

@@ -7,6 +7,7 @@
  *  [/] color selection
  *  [ ] save/load functionality
  *  [/] export functionality (tasm)
+ *  [ ] Add blinking (actually important for intensity)
  *  [ ] cells should be 2x1 (2 horizontal cells per character)
  *  [ ] Add ascii characters to blocks (finally can use the foreground color)
  *      * maybe a toggle button to switch between ascii and block mode
@@ -16,7 +17,7 @@ import './style.css';
 import { decodeCellData, encodeCellData, BACKGROUND_PALETTE } from './color';
 
 // --- CONFIG & DOM ELEMENTS ---
-const app = document.getElementById('app')!;
+const app : HTMLElement | null = document.getElementById('app')!;
 if (!app) throw new Error('Failed to find the app element');
 
 app.innerHTML = `
@@ -34,6 +35,9 @@ app.innerHTML = `
         <button id="erase-btn" class="control-btn" aria-label="Erase">
             <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20.49 4.51a2.828 2.828 0 1 1-4 4L8.5 16.51 4 21l-1.5-1.5L7.5 15l-4-4 4-4Z"/><path d="m15 5 4 4"/></svg>
         </button>
+        <button id="blink-btn" class="control-btn" aria-label="Toggle Blinking">
+            <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M12 12a5 5 0 1 0 0-10 5 5 0 0 0 0 10z"></path></svg>
+        </button>
         <button id="render-btn" class="control-btn" aria-label="Render and Copy TASM">
             <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="16 18 22 12 16 6"></polyline><polyline points="8 6 2 12 8 18"></polyline></svg>
         </button>
@@ -41,19 +45,30 @@ app.innerHTML = `
 </div>
 `;
 
-let start = `
+let macros : string = `
 putc MACRO char
     mov ah, 02h
     mov dl, char
     int 21h
 ENDM
-renderc MACRO char
-    mov AH, 09h 
-    mov bl, char
-    mov cx, 1 
+renderc MACRO char, page, color, write
+    mov ah, 09h 
+    mov al, char ; character to write
+    mov bh, page ; page number
+    mov bl, color
+    mov cx, write; how many times to write
     int 10h
-    putc ' '
 ENDM
+setcursor MACRO row, col
+    mov ah, 02h
+    mov bh, 00h
+    mov dh, row
+    mov dl, col
+    int 10h
+ENDM
+`;
+
+let start : string = macros + `
 .model small
 .code
 .stack 100h
@@ -63,30 +78,38 @@ start :
     mov al, 03h
     int 10h\n
 `;
-let middle = ``
-let end = `
-    mov ax, 4c00h ; exit dos
-    int 27h ; terminate
+let middle : string = ``
+let end : string = `
+    mov ah, 4Ch      ; DOS exit function
+    mov al, 0        ; Return code 0
+    int 21h          ; Call DOS interrupt
 end start ; end program
 `
 
+
 function generateTASMCode(gridData: (number | null)[][]): string {
-    let code = start;
+    middle = '';
+
     for (let row = 0; row < gridData.length; row++) {
+        let has_cell_in_col : boolean = false;
         for (let col = 0; col < gridData[row].length; col++) {
-            let cellValue = gridData[row][col];
-            if (cellValue === null) cellValue = 0;
-            // each cell is rendered twice for 2x1 aspect ratio
-            let tmp = cellValue.toString(16);
-            if (tmp == 'f') tmp = '0';
-            middle += `\trenderc ${tmp}h\n`;
-            middle += `\trenderc ${tmp}h\n`;
+            const cellValue = gridData[row][col];
+            // Only generate code for cells that are not empty (not null)
+            if (cellValue !== null) {
+                const attribute = cellValue.toString(16) + 'h';
+                const screen_col = col * 2; // Each grid cell is 2 characters wide
+
+                middle += `\tsetcursor ${row}, ${screen_col}\n`;
+                middle += `\trenderc 20h, 0, ${attribute},2\n\n`;
+                has_cell_in_col = true;
+            }
+
+            if (col == gridData[row].length-1 && !has_cell_in_col)
+                middle += `\tputc 0ah\n`
         }
-        // add newline after each row
-        middle += `\n\tputc 0ah\n\n`;
     }
-    code += middle + end;
-    // debug
+
+    const code: string = start + middle + end;
     console.log('Generated TASM Code:\n', code);
     return code;
 }
@@ -95,39 +118,42 @@ function generateTASMCode(gridData: (number | null)[][]): string {
 let GRID_ROWS: number = 20;
 let GRID_COLS: number = 20;
 
-const MAX_GRID: number = 30*30;
-
 const MIN_ROWS: number = 1;
 const MIN_COLS: number = 1;
+
+// 0-79, technically we lose one col here
+const MAX_ROWS: number = 24;
+const MAX_COLS: number = 39; 
 
 let isErasing: boolean = false;
 let isDrawing: boolean = false;
 let isMouseDown: boolean = false;
 
 // 8-Bit "Color" State
-let currentBgIndex = 1; // Default: black background
-let currentFgIndex = 15; // Default: White foreground
-let isBlinkEnabled = false; // Default: Steady
+let currentBgIndex : number = 1; // Default: black background
+let currentFgIndex : number = 15; // Default: White foreground
+let isBlinkEnabled : boolean = false; // Default: Steady
 
 let cellElements: HTMLDivElement[][] = [];
 let gridData: (number | null)[][] = [];
 // ------------------------
 
-const gridContainer = document.createElement('div');
+const gridContainer : HTMLDivElement = document.createElement('div');
 gridContainer.className = 'grid-container';
 gridContainer.style.setProperty('--grid-cols', String(GRID_COLS));
 gridContainer.style.setProperty('--grid-rows', String(GRID_ROWS));
 
-const drawBtn = document.getElementById('draw-btn') as HTMLButtonElement;
-const eraseBtn = document.getElementById('erase-btn') as HTMLButtonElement;
-const bgColorPanel = document.getElementById('bg-color-panel') as HTMLDivElement;
-const renderBtn = document.getElementById('render-btn') as HTMLButtonElement;
+const drawBtn       : HTMLElement = document.getElementById('draw-btn') as HTMLButtonElement;
+const eraseBtn      : HTMLElement = document.getElementById('erase-btn') as HTMLButtonElement;
+const blinkBtn      : HTMLElement = document.getElementById('blink-btn') as HTMLButtonElement;
+const bgColorPanel  : HTMLDivElement = document.getElementById('bg-color-panel') as HTMLDivElement;
+const renderBtn     : HTMLElement = document.getElementById('render-btn') as HTMLButtonElement;
 
-const rowsInput = document.getElementById('rows-input') as HTMLInputElement;
-const colsInput = document.getElementById('cols-input') as HTMLInputElement;
-const resizeBtn = document.getElementById('resize-btn') as HTMLButtonElement;
+const rowsInput     : HTMLInputElement = document.getElementById('rows-input') as HTMLInputElement;
+const colsInput     : HTMLInputElement = document.getElementById('cols-input') as HTMLInputElement;
+const resizeBtn     : HTMLElement = document.getElementById('resize-btn') as HTMLButtonElement;
 
-function createGrid(rows: number, cols: number) {
+function createGrid(rows: number, cols: number) : void {
     middle = '';
     GRID_ROWS = rows;
     GRID_COLS = cols;
@@ -140,7 +166,7 @@ function createGrid(rows: number, cols: number) {
     gridContainer.style.setProperty('--grid-cols', String(cols));
     gridContainer.style.setProperty('--grid-rows', String(rows));
 
-    for (let i = 0; i < rows; i++) {
+    for (let i : number = 0; i < rows; i++) {
         gridData[i] = [];
         cellElements[i] = [];
         for (let j = 0; j < cols; j++) {
@@ -163,7 +189,7 @@ function createGrid(rows: number, cols: number) {
 /**
  * Renders a single cell's appearance based on its 8-bit value.
  */
-function renderCell(cell: HTMLDivElement, value: number | null) {
+function renderCell(cell: HTMLDivElement, value: number | null) : void {
     if (value === null) {
         // Style for an erased cell
         cell.style.backgroundColor = '';
@@ -183,9 +209,9 @@ function renderCell(cell: HTMLDivElement, value: number | null) {
 /**
  * Updates the data model and re-renders a cell based on the current tool.
  */
-function applyDrawing(cell: HTMLDivElement) {
-    const row = parseInt(cell.dataset.row!);
-    const col = parseInt(cell.dataset.col!);
+function applyDrawing(cell: HTMLDivElement) : void {
+    const row : number = parseInt(cell.dataset.row!);
+    const col : number = parseInt(cell.dataset.col!);
 
     let newValue: number | null = null;
 
@@ -263,11 +289,11 @@ window.addEventListener('click', () => {
 // --- EVENT LISTENERS ---
 
 resizeBtn.addEventListener('click', () => {
-    const newRows = parseInt(rowsInput.value, 10);
-    const newCols = parseInt(colsInput.value, 10);
+    const newRows : number = parseInt(rowsInput.value, 10);
+    const newCols : number = parseInt(colsInput.value, 10);
 
-    if (isNaN(newRows) || isNaN(newCols) || newRows < MIN_ROWS || newCols < MIN_COLS || newRows*newCols > MAX_GRID) {
-        alert(`Please grid within (1-${MAX_GRID}) cells.`);
+    if (isNaN(newRows) || isNaN(newCols) || newRows < MIN_ROWS || newCols < MIN_COLS || MAX_COLS < newCols || MAX_ROWS < newRows) {
+        alert(`Please grid within (${MAX_ROWS}x${MAX_COLS}) cells.`);
         return;
     }
 
@@ -289,6 +315,11 @@ eraseBtn.addEventListener('click', () => {
     isErasing = true;
     eraseBtn.classList.add('active');
     drawBtn.classList.remove('active');
+});
+
+blinkBtn.addEventListener('click', () => {
+    isBlinkEnabled = !isBlinkEnabled;
+    blinkBtn.classList.toggle('active');
 });
 
 
