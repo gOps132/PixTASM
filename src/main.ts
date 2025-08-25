@@ -103,9 +103,9 @@ function generateTASMCode(gridData: (number | null)[][]): string {
                 middle += `\trenderc 20h, 0, ${attribute},2\n\n`;
                 has_cell_in_col = true;
             }
-
-            if (col == gridData[row].length-1 && !has_cell_in_col)
-                middle += `\tputc 0ah\n`
+            // TODO: Optimize further, putc in the middle of renders
+            // if (col == gridData[row].length-1 && !has_cell_in_col)
+            //     middle += `\tputc 0ah\n`
         }
     }
 
