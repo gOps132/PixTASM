@@ -96,8 +96,10 @@ function generateTASMCode(gridData: (number | null)[][]): string {
             const cellValue = gridData[row][col];
             // Only generate code for cells that are not empty (not null)
             if (cellValue !== null) {
-                const attribute = cellValue.toString(16) + 'h';
-                const screen_col = col * 2; // Each grid cell is 2 characters wide
+                let tmp : string = cellValue.toString(16);
+                if (tmp == 'f') tmp = '0';
+                const attribute : string = tmp + 'h';
+                const screen_col : number = col * 2; // Each grid cell is 2 characters wide
 
                 middle += `\tsetcursor ${row}, ${screen_col}\n`;
                 middle += `\trenderc 20h, 0, ${attribute},2\n\n`;
