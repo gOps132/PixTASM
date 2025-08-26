@@ -17,7 +17,7 @@ import './style.css';
 import { decodeCellData, encodeCellData, BACKGROUND_PALETTE } from './color';
 
 // --- CONFIG & DOM ELEMENTS ---
-const app : HTMLElement | null = document.getElementById('app')!;
+const app: HTMLElement | null = document.getElementById('app')!;
 if (!app) throw new Error('Failed to find the app element');
 
 app.innerHTML = `
@@ -45,7 +45,7 @@ app.innerHTML = `
 </div>
 `;
 
-let macros : string = `
+let macros: string = `
 putc MACRO char
     mov ah, 02h
     mov dl, char
@@ -68,7 +68,7 @@ setcursor MACRO row, col
 ENDM
 `;
 
-let start : string = macros + `
+let start: string = macros + `
 .model small
 .code
 .stack 100h
@@ -78,36 +78,64 @@ start :
     mov al, 03h
     int 10h\n
 `;
-let middle : string = ``
-let end : string = `
+let middle: string = ``
+let end: string = `
     mov ah, 4Ch      ; DOS exit function
     mov al, 0        ; Return code 0
     int 21h          ; Call DOS interrupt
 end start ; end program
 `
 
-
 function generateTASMCode(gridData: (number | null)[][]): string {
-    middle = '';
-
     for (let row = 0; row < gridData.length; row++) {
-        let has_cell_in_col : boolean = false;
+        let consecutiveCount = 0;
+        let startCol = -1;
+        let currentAttribute: string | null = null;
+
         for (let col = 0; col < gridData[row].length; col++) {
             const cellValue = gridData[row][col];
-            // Only generate code for cells that are not empty (not null)
-            if (cellValue !== null) {
-                let tmp : string = cellValue.toString(16);
-                if (tmp == 'f') tmp = '0';
-                const attribute : string = tmp + 'h';
-                const screen_col : number = col * 2; // Each grid cell is 2 characters wide
+            let attribute: string | null = null;
 
-                middle += `\tsetcursor ${row}, ${screen_col}\n`;
-                middle += `\trenderc 20h, 0, ${attribute},2\n\n`;
-                has_cell_in_col = true;
+            // Determine the attribute for the current cell
+            if (cellValue !== null) {
+                let tmp = cellValue.toString(16);
+                if (tmp === 'f') tmp = '0';
+                attribute = `${tmp}h`;
             }
-            // TODO: Optimize further, putc in the middle of renders
-            // if (col == gridData[row].length-1 && !has_cell_in_col)
-            //     middle += `\tputc 0ah\n`
+
+            // A sequence ends if the current attribute is different from the new one,
+            // or if the current cell is null. If so, render the sequence.
+            if (currentAttribute !== null && (attribute !== currentAttribute || cellValue === null)) {
+                const screen_col = startCol * 2; // Each grid cell is 2 characters wide
+                middle += `\n\tsetcursor ${row}, ${screen_col}\n`;
+                middle += `\trenderc 20h, 0, ${currentAttribute}, ${consecutiveCount * 2}\n`;
+
+                // Reset tracking for the next sequence
+                consecutiveCount = 0; 
+                currentAttribute = null;
+            }
+
+            // If the current cell is not empty, either start a new sequence 
+            // or continue the existing one.
+            if (cellValue !== null) {
+                if (currentAttribute === null) {
+                    // This is the start of a new sequence
+                    currentAttribute = attribute;
+                    startCol = col;
+                    consecutiveCount = 1;
+                } else {
+                    // This is a continuation of the current sequence
+                    consecutiveCount++;
+                }
+            }
+        }
+
+        // After iterating through all columns, a sequence might still be active
+        // if it extends to the end of the row. Render this final sequence.
+        if (currentAttribute !== null) {
+            const screen_col = startCol * 2;
+            middle += `\n\tsetcursor ${row}, ${screen_col}\n`;
+            middle += `\trenderc 20h, 0, ${currentAttribute}, ${consecutiveCount * 2}\n`;
         }
     }
 
@@ -117,45 +145,45 @@ function generateTASMCode(gridData: (number | null)[][]): string {
 }
 
 // --- STATE MANAGEMENT ---
-let GRID_ROWS: number = 20;
-let GRID_COLS: number = 20;
+let GRID_ROWS: number = 10;
+let GRID_COLS: number = 10;
 
 const MIN_ROWS: number = 1;
 const MIN_COLS: number = 1;
 
 // 0-79, technically we lose one col here
 const MAX_ROWS: number = 24;
-const MAX_COLS: number = 39; 
+const MAX_COLS: number = 39;
 
 let isErasing: boolean = false;
 let isDrawing: boolean = false;
 let isMouseDown: boolean = false;
 
 // 8-Bit "Color" State
-let currentBgIndex : number = 1; // Default: black background
-let currentFgIndex : number = 15; // Default: White foreground
-let isBlinkEnabled : boolean = false; // Default: Steady
+let currentBgIndex: number = 1; // Default: black background
+let currentFgIndex: number = 15; // Default: White foreground
+let isBlinkEnabled: boolean = false; // Default: Steady
 
 let cellElements: HTMLDivElement[][] = [];
 let gridData: (number | null)[][] = [];
 // ------------------------
 
-const gridContainer : HTMLDivElement = document.createElement('div');
+const gridContainer: HTMLDivElement = document.createElement('div');
 gridContainer.className = 'grid-container';
 gridContainer.style.setProperty('--grid-cols', String(GRID_COLS));
 gridContainer.style.setProperty('--grid-rows', String(GRID_ROWS));
 
-const drawBtn       : HTMLElement = document.getElementById('draw-btn') as HTMLButtonElement;
-const eraseBtn      : HTMLElement = document.getElementById('erase-btn') as HTMLButtonElement;
-const blinkBtn      : HTMLElement = document.getElementById('blink-btn') as HTMLButtonElement;
-const bgColorPanel  : HTMLDivElement = document.getElementById('bg-color-panel') as HTMLDivElement;
-const renderBtn     : HTMLElement = document.getElementById('render-btn') as HTMLButtonElement;
+const drawBtn: HTMLElement = document.getElementById('draw-btn') as HTMLButtonElement;
+const eraseBtn: HTMLElement = document.getElementById('erase-btn') as HTMLButtonElement;
+const blinkBtn: HTMLElement = document.getElementById('blink-btn') as HTMLButtonElement;
+const bgColorPanel: HTMLDivElement = document.getElementById('bg-color-panel') as HTMLDivElement;
+const renderBtn: HTMLElement = document.getElementById('render-btn') as HTMLButtonElement;
 
-const rowsInput     : HTMLInputElement = document.getElementById('rows-input') as HTMLInputElement;
-const colsInput     : HTMLInputElement = document.getElementById('cols-input') as HTMLInputElement;
-const resizeBtn     : HTMLElement = document.getElementById('resize-btn') as HTMLButtonElement;
+const rowsInput: HTMLInputElement = document.getElementById('rows-input') as HTMLInputElement;
+const colsInput: HTMLInputElement = document.getElementById('cols-input') as HTMLInputElement;
+const resizeBtn: HTMLElement = document.getElementById('resize-btn') as HTMLButtonElement;
 
-function createGrid(rows: number, cols: number) : void {
+function createGrid(rows: number, cols: number): void {
     middle = '';
     GRID_ROWS = rows;
     GRID_COLS = cols;
@@ -168,7 +196,7 @@ function createGrid(rows: number, cols: number) : void {
     gridContainer.style.setProperty('--grid-cols', String(cols));
     gridContainer.style.setProperty('--grid-rows', String(rows));
 
-    for (let i : number = 0; i < rows; i++) {
+    for (let i: number = 0; i < rows; i++) {
         gridData[i] = [];
         cellElements[i] = [];
         for (let j = 0; j < cols; j++) {
@@ -191,7 +219,7 @@ function createGrid(rows: number, cols: number) : void {
 /**
  * Renders a single cell's appearance based on its 8-bit value.
  */
-function renderCell(cell: HTMLDivElement, value: number | null) : void {
+function renderCell(cell: HTMLDivElement, value: number | null): void {
     if (value === null) {
         // Style for an erased cell
         cell.style.backgroundColor = '';
@@ -211,9 +239,9 @@ function renderCell(cell: HTMLDivElement, value: number | null) : void {
 /**
  * Updates the data model and re-renders a cell based on the current tool.
  */
-function applyDrawing(cell: HTMLDivElement) : void {
-    const row : number = parseInt(cell.dataset.row!);
-    const col : number = parseInt(cell.dataset.col!);
+function applyDrawing(cell: HTMLDivElement): void {
+    const row: number = parseInt(cell.dataset.row!);
+    const col: number = parseInt(cell.dataset.col!);
 
     let newValue: number | null = null;
 
@@ -291,8 +319,8 @@ window.addEventListener('click', () => {
 // --- EVENT LISTENERS ---
 
 resizeBtn.addEventListener('click', () => {
-    const newRows : number = parseInt(rowsInput.value, 10);
-    const newCols : number = parseInt(colsInput.value, 10);
+    const newRows: number = parseInt(rowsInput.value, 10);
+    const newCols: number = parseInt(colsInput.value, 10);
 
     if (isNaN(newRows) || isNaN(newCols) || newRows < MIN_ROWS || newCols < MIN_COLS || MAX_COLS < newCols || MAX_ROWS < newRows) {
         alert(`Please grid within (${MAX_ROWS}x${MAX_COLS}) cells.`);
