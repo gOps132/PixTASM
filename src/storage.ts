@@ -1,2 +1,5 @@
-const STORAGE_KEY = 'pixtasm_drawing_data';
+// --- LOCALSTORAGE KEYS ---
+export const STORAGE_KEY_GRID_DATA = 'PIXTASM_GRID_DATA';
+export const STORAGE_KEY_GRID_ROWS = 'PIXTASM_GRID_ROWS';
+export const STORAGE_KEY_GRID_COLS = 'PIXTASM_GRID_COLS';
 

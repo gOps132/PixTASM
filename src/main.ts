@@ -15,6 +15,7 @@
 
 import './style.css';
 import { decodeCellData, encodeCellData, BACKGROUND_PALETTE } from './color';
+import { STORAGE_KEY_GRID_DATA, STORAGE_KEY_GRID_ROWS, STORAGE_KEY_GRID_COLS } from './storage';
 
 // --- CONFIG & DOM ELEMENTS ---
 const app: HTMLElement | null = document.getElementById('app')!;
@@ -166,6 +167,32 @@ let isBlinkEnabled: boolean = false; // Default: Steady
 
 let cellElements: HTMLDivElement[][] = [];
 let gridData: (number | null)[][] = [];
+
+function saveGridState(): void {
+    try {
+        localStorage.setItem(STORAGE_KEY_GRID_ROWS, String(GRID_ROWS));
+        localStorage.setItem(STORAGE_KEY_GRID_COLS, String(GRID_COLS));
+        localStorage.setItem(STORAGE_KEY_GRID_DATA, JSON.stringify(gridData));
+        console.log('Grid state saved.');
+    } catch (error) {
+        console.error('Failed to save grid state to localStorage:', error);
+    }
+}
+
+function loadGridState(): void {
+    const savedRows = localStorage.getItem(STORAGE_KEY_GRID_ROWS);
+    const savedCols = localStorage.getItem(STORAGE_KEY_GRID_COLS);
+
+    if (savedRows && savedCols) {
+        GRID_ROWS = parseInt(savedRows, 10) || 10;
+        GRID_COLS = parseInt(savedCols, 10) || 10;
+        console.log(`Loaded grid state: ${GRID_ROWS}x${GRID_COLS}`);
+    }
+
+    // Update input fields to reflect loaded or default values
+    rowsInput.value = String(GRID_ROWS);
+    colsInput.value = String(GRID_COLS);
+}
 // ------------------------
 
 const gridContainer: HTMLDivElement = document.createElement('div');
@@ -196,6 +223,23 @@ function createGrid(rows: number, cols: number): void {
     gridContainer.style.setProperty('--grid-cols', String(cols));
     gridContainer.style.setProperty('--grid-rows', String(rows));
 
+    // Try to load the saved grid data
+    const savedDataJSON = localStorage.getItem(STORAGE_KEY_GRID_DATA);
+    let savedData: (number | null)[][] | null = null;
+    if (savedDataJSON) {
+        try {
+            savedData = JSON.parse(savedDataJSON);
+            // Basic validation to ensure saved data matches dimensions
+            if (savedData?.length !== rows || savedData[0]?.length !== cols) {
+                savedData = null; // Mismatch, treat as no saved data
+                localStorage.removeItem(STORAGE_KEY_GRID_DATA); // Clean up invalid data
+            }
+        } catch (e) {
+            console.error("Failed to parse saved grid data.", e);
+            savedData = null;
+        }
+    }
+
     for (let i: number = 0; i < rows; i++) {
         gridData[i] = [];
         cellElements[i] = [];
@@ -207,7 +251,11 @@ function createGrid(rows: number, cols: number): void {
 
             gridContainer.appendChild(cell);
             cellElements[i][j] = cell;
-            gridData[i][j] = null;
+
+            const cellValue = savedData?.[i]?.[j] ?? null;
+            gridData[i][j] = cellValue;
+
+            renderCell(cell, cellValue);
         }
     }
 
@@ -256,11 +304,12 @@ function applyDrawing(cell: HTMLDivElement): void {
     }
     gridData[row][col] = newValue;
     renderCell(cell, newValue);
+    saveGridState();
 }
 
 
 // --- INITIALIZATION --- 
-
+loadGridState();
 createGrid(GRID_ROWS, GRID_COLS);
 app.appendChild(gridContainer);
 createColorPanel(bgColorPanel, BACKGROUND_PALETTE, (selectedIndex) => {
@@ -330,7 +379,10 @@ resizeBtn.addEventListener('click', () => {
     localStorage.setItem('gridRows', String(newRows));
     localStorage.setItem('gridCols', String(newCols));
 
+    localStorage.removeItem(STORAGE_KEY_GRID_DATA);
+
     createGrid(newRows, newCols);
+    saveGridState();
 });
 
 drawBtn.addEventListener('click', () => {
