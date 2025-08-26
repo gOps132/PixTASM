@@ -36,9 +36,9 @@ app.innerHTML = `
         <button id="erase-btn" class="control-btn" aria-label="Erase">
             <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20.49 4.51a2.828 2.828 0 1 1-4 4L8.5 16.51 4 21l-1.5-1.5L7.5 15l-4-4 4-4Z"/><path d="m15 5 4 4"/></svg>
         </button>
-        <button id="blink-btn" class="control-btn" aria-label="Toggle Blinking">
+        <!-- <button id="blink-btn" class="control-btn" aria-label="Toggle Blinking">
             <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M12 12a5 5 0 1 0 0-10 5 5 0 0 0 0 10z"></path></svg>
-        </button>
+        </button> -->
         <button id="render-btn" class="control-btn" aria-label="Render and Copy TASM">
             <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="16 18 22 12 16 6"></polyline><polyline points="8 6 2 12 8 18"></polyline></svg>
         </button>
@@ -202,7 +202,7 @@ gridContainer.style.setProperty('--grid-rows', String(GRID_ROWS));
 
 const drawBtn: HTMLElement = document.getElementById('draw-btn') as HTMLButtonElement;
 const eraseBtn: HTMLElement = document.getElementById('erase-btn') as HTMLButtonElement;
-const blinkBtn: HTMLElement = document.getElementById('blink-btn') as HTMLButtonElement;
+// const blinkBtn: HTMLElement = document.getElementById('blink-btn') as HTMLButtonElement;
 const bgColorPanel: HTMLDivElement = document.getElementById('bg-color-panel') as HTMLDivElement;
 const renderBtn: HTMLElement = document.getElementById('render-btn') as HTMLButtonElement;
 
@@ -399,10 +399,10 @@ eraseBtn.addEventListener('click', () => {
     drawBtn.classList.remove('active');
 });
 
-blinkBtn.addEventListener('click', () => {
-    isBlinkEnabled = !isBlinkEnabled;
-    blinkBtn.classList.toggle('active');
-});
+// blinkBtn.addEventListener('click', () => {
+//     isBlinkEnabled = !isBlinkEnabled;
+//     blinkBtn.classList.toggle('active');
+// });
 
 
 gridContainer.addEventListener('mousedown', (e) => {
