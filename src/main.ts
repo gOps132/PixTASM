@@ -33,8 +33,8 @@ app.innerHTML = `
 <div class="tools">
     <div id="bg-color-panel" class="color-panel"></div>
     <div class="controls">
-        <input type="number" id="rows-input" class="size-input" value="10" min="1" max="1">
-        <input type="number" id="cols-input" class="size-input" value="10" min="1" max="80">
+        <input type="number" id="rows-input" class="size-input" value="25" min="1" max="1">
+        <input type="number" id="cols-input" class="size-input" value="80" min="1" max="80">
         <button id="resize-btn" class="control-btn">
             <img src=${resizeSVG} width="24" height="24" aria-label="Resize"/>
         </button>
@@ -261,6 +261,10 @@ function createGrid(rows: number, cols: number): void {
             cell.dataset.row = String(i);
             cell.dataset.col = String(j);
 
+            if (j % 2 == 0) {
+                cell.classList.add('dim-border');
+            }
+
             gridContainer.appendChild(cell);
             cellElements[i][j] = cell;
 
@@ -370,13 +374,6 @@ function createColorPanel(
         panel.appendChild(swatch);
     });
 }
-
-// close color panel when clicking outside
-window.addEventListener('click', () => {
-    if (bgColorPanel.classList.contains('visible')) {
-        bgColorPanel.classList.remove('visible');
-    }
-});
 
 // --- EVENT LISTENERS ---
 
