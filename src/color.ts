@@ -11,18 +11,6 @@ export const BACKGROUND_PALETTE = [
     '#AA0',
     '#AAA'
 ];
-// Set of background colors with less intensity if 
-// blink is on
-// export const BACKGROUND_PALETTE_BLINK = [
-//     '#000',
-//     '#00A',
-//     '#0A0',
-//     '#0AA',
-//     '#A00',
-//     '#A0A',
-//     '#AA0',
-//     '#AAA'
-// ];
 export const FOREGROUND_PALETTE = [
     '#000',
     '#00A',

@@ -12,74 +12,63 @@ s:root {
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
 
-  --change_color: #646cff;
+  --change-color: #00A;
 }
 
 body {
-  margin: 0;
   display: flex;
   flex-direction: column;
-  /* place-items: center; */
-  /* justify-content: space-around; */
-
-  /* min-height: 100%;
-  max-height: 100vh; */
   background-color: #1e1e1e;
+  place-items: center;
+  justify-content: space-around;
+  height: 100vh;
+  overflow: hidden;
 }
 
 #app {
-  /* height: 100vh; */
-  margin: 0 auto;
-  padding: 2rem;
-  text-align: center;
-  min-width: 80vh;
-  width: 100%;
-  height: 100%;
-  /* overflow-y: scroll; */
+  width: 80vw;
+  height: 80vh;
+  align-self: center;
 }
 
-h1 {
-  font-size: 2em;
-  margin-bottom: 0.5em;
-}
-
-p {
-  /* color: #888; */
-  margin-bottom: 2em;
+.tools {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-around;
 }
 
 .grid-container {
   display: grid;
   grid-template-columns: repeat(var(--grid-cols, 30), 1fr);
-  margin: 0 auto;
+  /* margin: 0 auto; */
 
-  max-width: 50vw;
-  max-height: 50vh;
-
+  max-height: 60vh;
+  /* min-height: 10vh; */
   user-select: none;
-  /* Prevents text selection during drag */
-  /* border: 1px solid #444; */
-  /* padding: 3px; */
-  /* background-color: #545353; */
+  overflow: auto;
+}
+
+.grid-container::-webkit-scrollbar {
+  display: none;
 }
 
 .cell {
   width: 100%;
-  /* Maintain aspect ratio */
-  padding-bottom: 100%;
-  /* background-color: #444; */
+  padding-bottom: 200%;
+
   border: 0.1px solid #555;
   cursor: pointer;
   position: relative;
 }
 
 .cell:hover {
-  background-color: var(--change_color);
+  background-color: var(--change-color);
+  transform: scale(1.1);
 }
 
 /* .cell.selected {
-  background-color: var(--change_color);
-  border-color: var(--change_color);
+  background-color: var(--change-color);
+  border-color: var(--change-color);
 } */
 
 /* @keyframes blink-animation {
@@ -98,65 +87,46 @@ p {
   display: flex;
   gap: 0.5rem;
   /* Space between buttons */
-  justify-content: center;
 }
 
 /* Base style for each button */
 .control-btn {
   /* background-color: transparent; */
   border: 2px solid #555;
-  border-radius: 8px;
+  border-radius: 20rem;
   padding: 0.5rem;
   cursor: pointer;
   line-height: 0;
   /* Helps align the SVG inside */
   transition: all 0.2s ease-in-out;
   color: #888;
+  padding: 1rem;
   /* SVG will inherit this color */
 }
 
 /* Style for the SVG icon itself */
-.control-btn svg {
-  width: 40px;
-  height: 30px;
+/* .control-btn svg { */
+  /* width: 40px;
+  height: 30px; */
   /* stroke: currentColor; */
-}
+/* } */
 
 /* Style for when you hover over a button */
 .control-btn:hover {
-  background-color: #5a5a5a;
-  color: #fff;
+  filter: invert(100%);
 }
 
 /* Style for the currently active button */
 .control-btn.active {
-  background-color: var(--change_color);
-  border-color: var(--change_color);
+  filter: invert(100%);
   color: #fff;
 }
 
-#color-swatch {
-  width: 40px;
-  /* Match your picker size */
-  height: 40px;
-  border: 2px solid #555;
-  border-radius: 8px;
-  margin-left: 0.5rem;
-  background-color: #646cff;
-  /* Initial color */
-}
-
-
-/* PALLETE SHITTT */
 .color-panel {
   display: none;
-  /* Hidden by default */
   position: fixed;
 
-  top: 50%;
-  left: 20px;
-  transform: translateY(-50%);
-  /* This vertically centers it perfectly */
+  bottom: 1rem;
 
   background-color: #2e2e2e;
   border: 1px solid #555;
@@ -164,15 +134,12 @@ p {
   padding: 8px;
   z-index: 10;
 
+
+  /* TODO: make sure it wraps perfectly with 8 colors */
   display: flex;
   flex-wrap: wrap;
-  gap: 6px;
 
-  width: 90px;
-}
-
-.color-panel.visible {
-  display: flex;
+  gap: 0.3rem;
 }
 
 .color-swatch {
@@ -191,7 +158,6 @@ p {
 .color-swatch.selected {
   border-color: #fff;
   box-shadow: 0 0 0 2px #fff;
-  /* A clear outer glow */
 }
 
 .grid-size-controls {
@@ -199,7 +165,6 @@ p {
   align-items: center;
   justify-content: center;
   gap: 0.5rem;
-  margin-top: 1rem;
 }
 
 .size-input {
@@ -223,5 +188,3 @@ p {
   -webkit-appearance: none;
   margin: 0;
 }
-
-/* TODO: SVG ICON MUST CORRESPOND TO CURRENT SELECTED COLOR */

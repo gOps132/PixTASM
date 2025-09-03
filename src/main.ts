@@ -8,7 +8,6 @@
  *  [ ] save/load functionality
  *  [/] export functionality (tasm)
  *  [ ] Add blinking (actually important for intensity)
- *  [ ] cells should be 2x1 (2 horizontal cells per character)
  *  [ ] Add ascii characters to blocks (finally can use the foreground color)
  *      * maybe a toggle button to switch between ascii and block mode
  */
@@ -17,30 +16,42 @@ import './style.css';
 import { decodeCellData, encodeCellData, BACKGROUND_PALETTE } from './color';
 import { STORAGE_KEY_GRID_DATA, STORAGE_KEY_GRID_ROWS, STORAGE_KEY_GRID_COLS } from './storage';
 
+import drawSVG from '/draw.svg';
+import eraseSVG from '/erase.svg';
+import textSVG from '/text.svg';
+import winkSVG from '/wink.svg';
+import codeSVG from '/code.svg';
+import resizeSVG from '/resize.svg'
+
 // --- CONFIG & DOM ELEMENTS ---
 const app: HTMLElement | null = document.getElementById('app')!;
 if (!app) throw new Error('Failed to find the app element');
 
+//            <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 3a2.828 2.828 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z"></path></svg>
+
 app.innerHTML = `
-<div>
+<div class="tools">
     <div id="bg-color-panel" class="color-panel"></div>
     <div class="controls">
-        <div class="grid-size-controls">
-            <input type="number" id="rows-input" class="size-input" value="10" min="1" max="50">
-            <input type="number" id="cols-input" class="size-input" value="10" min="1" max="50">
-            <button id="resize-btn" class="control-btn">Resize</button>
-        </div>
+        <input type="number" id="rows-input" class="size-input" value="10" min="1" max="1">
+        <input type="number" id="cols-input" class="size-input" value="10" min="1" max="80">
+        <button id="resize-btn" class="control-btn">
+            <img src=${resizeSVG} width="24" height="24" aria-label="Resize"/>
+        </button>
         <button id="draw-btn" class="control-btn" aria-label="Draw">
-            <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 3a2.828 2.828 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z"></path></svg>
+            <img src=${drawSVG} width="24" height="24"/>
         </button>
         <button id="erase-btn" class="control-btn" aria-label="Erase">
-            <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20.49 4.51a2.828 2.828 0 1 1-4 4L8.5 16.51 4 21l-1.5-1.5L7.5 15l-4-4 4-4Z"/><path d="m15 5 4 4"/></svg>
+            <img src=${eraseSVG} width="24" height="24"/>
         </button>
-        <!-- <button id="blink-btn" class="control-btn" aria-label="Toggle Blinking">
-            <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M12 12a5 5 0 1 0 0-10 5 5 0 0 0 0 10z"></path></svg>
-        </button> -->
+        <button id="text-btn" class="control-btn" aria-label="Text Mode">
+            <img src=${textSVG} width="24" height="24"/>
+        </button>
+        <button id="blink-btn" class="control-btn" aria-label="Toggle Blinking">
+            <img src=${winkSVG} width="24" height="24"/>
+        </button>
         <button id="render-btn" class="control-btn" aria-label="Render and Copy TASM">
-            <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="16 18 22 12 16 6"></polyline><polyline points="8 6 2 12 8 18"></polyline></svg>
+            <img src=${codeSVG} width="24" height="24"/>
         </button>
     </div>
 </div>
@@ -107,9 +118,9 @@ function generateTASMCode(gridData: (number | null)[][]): string {
             // A sequence ends if the current attribute is different from the new one,
             // or if the current cell is null. If so, render the sequence.
             if (currentAttribute !== null && (attribute !== currentAttribute || cellValue === null)) {
-                const screen_col = startCol * 2; // Each grid cell is 2 characters wide
+                const screen_col = startCol;
                 middle += `\n\tsetcursor ${row}, ${screen_col}\n`;
-                middle += `\trenderc 20h, 0, ${currentAttribute}, ${consecutiveCount * 2}\n`;
+                middle += `\trenderc 20h, 0, ${currentAttribute}, ${consecutiveCount}\n`;
 
                 // Reset tracking for the next sequence
                 consecutiveCount = 0; 
@@ -134,7 +145,7 @@ function generateTASMCode(gridData: (number | null)[][]): string {
         // After iterating through all columns, a sequence might still be active
         // if it extends to the end of the row. Render this final sequence.
         if (currentAttribute !== null) {
-            const screen_col = startCol * 2;
+            const screen_col = startCol;
             middle += `\n\tsetcursor ${row}, ${screen_col}\n`;
             middle += `\trenderc 20h, 0, ${currentAttribute}, ${consecutiveCount * 2}\n`;
         }
@@ -152,12 +163,12 @@ let GRID_COLS: number = 10;
 const MIN_ROWS: number = 1;
 const MIN_COLS: number = 1;
 
-// 0-79, technically we lose one col here
-const MAX_ROWS: number = 24;
-const MAX_COLS: number = 39;
+const MAX_ROWS: number = 25; // actual code 0 indexed
+const MAX_COLS: number = 80;
 
 let isErasing: boolean = false;
 let isDrawing: boolean = false;
+let isTextMode: boolean = false;
 let isMouseDown: boolean = false;
 
 // 8-Bit "Color" State
@@ -166,6 +177,7 @@ let currentFgIndex: number = 15; // Default: White foreground
 let isBlinkEnabled: boolean = false; // Default: Steady
 
 let cellElements: HTMLDivElement[][] = [];
+let activeCell: HTMLDivElement | null = null;
 let gridData: (number | null)[][] = [];
 
 function saveGridState(): void {
@@ -202,7 +214,7 @@ gridContainer.style.setProperty('--grid-rows', String(GRID_ROWS));
 
 const drawBtn: HTMLElement = document.getElementById('draw-btn') as HTMLButtonElement;
 const eraseBtn: HTMLElement = document.getElementById('erase-btn') as HTMLButtonElement;
-// const blinkBtn: HTMLElement = document.getElementById('blink-btn') as HTMLButtonElement;
+const blinkBtn: HTMLElement = document.getElementById('blink-btn') as HTMLButtonElement;
 const bgColorPanel: HTMLDivElement = document.getElementById('bg-color-panel') as HTMLDivElement;
 const renderBtn: HTMLElement = document.getElementById('render-btn') as HTMLButtonElement;
 
@@ -258,9 +270,7 @@ function createGrid(rows: number, cols: number): void {
             renderCell(cell, cellValue);
         }
     }
-
     console.log(`Grid created with ${rows} rows and ${cols} columns.`);
-
     // localStorage.removeItem(STORAGE_KEY);
 }
 
@@ -339,9 +349,12 @@ function createColorPanel(
             swatch.classList.add('selected');
         }
 
-        swatch.addEventListener('click', (e) => {
+        swatch.addEventListener('click', () => {
             // Update the state by calling the callback
             onColorSelect(index);
+
+            // TODO: ADD COLOR CHANGE HERE
+            app?.style.setProperty('--change-color', BACKGROUND_PALETTE[index]);
 
             // Update the visual selection
             panel.querySelectorAll('.color-swatch').forEach((sw) => {
@@ -386,30 +399,55 @@ resizeBtn.addEventListener('click', () => {
 });
 
 drawBtn.addEventListener('click', () => {
-    isDrawing = true;
-    isErasing = false;
-    drawBtn.classList.add('active');
-    eraseBtn.classList.remove('active');
+    if (!isDrawing) {
+        isDrawing = true;
+        isErasing = false;
+        drawBtn.classList.add('active');
+        eraseBtn.classList.remove('active');
+    } else {
+        isDrawing = false;
+        drawBtn.classList.remove('active');
+    }
 });
 
 eraseBtn.addEventListener('click', () => {
-    isDrawing = false;
-    isErasing = true;
-    eraseBtn.classList.add('active');
-    drawBtn.classList.remove('active');
+    if (!isErasing) {
+        isDrawing = false;
+        isErasing = true;
+        eraseBtn.classList.add('active');
+        drawBtn.classList.remove('active');
+    } else {
+        isErasing = false;
+        eraseBtn.classList.remove('active');
+    }
 });
 
-// blinkBtn.addEventListener('click', () => {
-//     isBlinkEnabled = !isBlinkEnabled;
-//     blinkBtn.classList.toggle('active');
-// });
-
+blinkBtn.addEventListener('click', () => {
+    isBlinkEnabled = !isBlinkEnabled;
+    blinkBtn.classList.toggle('active');
+});
 
 gridContainer.addEventListener('mousedown', (e) => {
     if (!(e.target instanceof HTMLDivElement)) return;
+    const cell = e.target;
     e.preventDefault();
-    isMouseDown = true;
-    applyDrawing(e.target);
+
+    // Deactivate any previously active cell
+    if (activeCell) {
+        activeCell.classList.remove('active');
+    }
+    
+    if (isTextMode) {
+        // Set the new active cell and highlight it
+        activeCell = cellElements[parseInt(cell.dataset.row!)][parseInt(cell.dataset.col!) * 2]; // Always activate the left cell of the pair
+        activeCell.classList.add('active');
+        isMouseDown = false; // Prevent dragging in text mode
+    } else {
+        // Handle drawing/erasing as before
+        activeCell = null; // Ensure no cell is active when not in text mode
+        isMouseDown = true;
+        applyDrawing(cell);
+    }
 });
 
 renderBtn.addEventListener('click', () => {
