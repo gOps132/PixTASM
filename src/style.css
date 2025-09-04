@@ -42,7 +42,7 @@ body {
   grid-template-columns: repeat(var(--grid-cols), 1fr);
   /* margin: 0 auto; */
 
-  max-height: 60vh;
+  max-height: 70vh;
   min-height: 45vh;
 
   user-select: none;
@@ -54,15 +54,10 @@ body {
 } */
 
 .cell {
-  /* width: 1rem; */
+  max-height: 100%;
   padding-bottom: 170%;
 
   border: 0.1px solid;
-
-  /* border-top: 0.1px solid #555;
-  border-bottom: 0.1px solid #555; */
-
-  /* border-top: 0.1px solid #555; */
 
   cursor: pointer;
   position: relative;
@@ -75,6 +70,19 @@ body {
 .cell:hover {
   background-color: var(--change-color);
   transform: scale(1.1);
+}
+
+.cell:focus {
+    outline: 2px dashed #ccc; /* Visible outline for keyboard focus */
+    outline-offset: -2px; /* Pulls the outline inside the border */
+}
+
+.cell.active-text-cell:focus {
+    outline: none;
+}
+
+.cell.active-text-cell {
+    outline: 2px solid #00f; /* Blue outline to indicate selection */
 }
 
 /* .cell.selected {

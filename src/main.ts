@@ -2,19 +2,20 @@
  * TODO:
  *  [/] basic drawing functionality
  *  [/] grid size selection
- *  [ ] grid size persistence
+ *  [X] grid size persistence (fixed inconsistencies)
  *  [/] erasing functionality
  *  [/] color selection
- *  [ ] save/load functionality
+ *  [ ] save/load functionality (grid data persistence is done, full save/load UI not yet)
  *  [/] export functionality (tasm)
  *  [ ] Add blinking (actually important for intensity)
- *  [ ] Add ascii characters to blocks (finally can use the foreground color)
+ *  [X] Add ascii characters to blocks (finally can use the foreground color)
  *      * maybe a toggle button to switch between ascii and block mode
  */
 
 import './style.css';
-import { decodeCellData, encodeCellData, BACKGROUND_PALETTE } from './color';
+import { decodeCellData, encodeCellData, BACKGROUND_PALETTE, FOREGROUND_PALETTE } from './color';
 import { STORAGE_KEY_GRID_DATA, STORAGE_KEY_GRID_ROWS, STORAGE_KEY_GRID_COLS } from './storage';
+import { getUnicodeCharFromCP437 } from './mappings'; // cp437ToUnicodeMap is not directly used here, only the function
 
 import drawSVG from '/draw.svg';
 import eraseSVG from '/erase.svg';
@@ -27,14 +28,12 @@ import resizeSVG from '/resize.svg'
 const app: HTMLElement | null = document.getElementById('app')!;
 if (!app) throw new Error('Failed to find the app element');
 
-//            <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 3a2.828 2.828 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z"></path></svg>
-
 app.innerHTML = `
 <div class="tools">
     <div id="bg-color-panel" class="color-panel"></div>
     <div class="controls">
-        <input type="number" id="rows-input" class="size-input" value="25" min="1" max="1">
-        <input type="number" id="cols-input" class="size-input" value="80" min="1" max="80">
+        <input type="number" id="rows-input" class="size-input" value="10" min="1" max="25">
+        <input type="number" id="cols-input" class="size-input" value="10" min="1" max="80">
         <button id="resize-btn" class="control-btn">
             <img src=${resizeSVG} width="24" height="24" aria-label="Resize"/>
         </button>
@@ -80,59 +79,64 @@ setcursor MACRO row, col
 ENDM
 `;
 
-let start: string = macros + `
-.model small
-.code
-.stack 100h
-start :
-    ; Set to video mode 
-    mov ah, 00h
-    mov al, 03h
-    int 10h\n
-`;
-let middle: string = ``
-let end: string = `
-    mov ah, 4Ch      ; DOS exit function
-    mov al, 0        ; Return code 0
-    int 21h          ; Call DOS interrupt
-end start ; end program
-`
+interface CellContent {
+    charCode: number | null; // ASCII character code (0-255)
+    attribute: number | null; // 8-bit color attribute
+}
 
-function generateTASMCode(gridData: (number | null)[][]): string {
+function generateTASMCode(gridData: (CellContent | null)[][]): string {
+    let currentMiddle = ''; 
+
     for (let row = 0; row < gridData.length; row++) {
         let consecutiveCount = 0;
         let startCol = -1;
-        let currentAttribute: string | null = null;
+        let currentSequenceChar: number | null = null;
+        let currentSequenceAttribute: number | null = null;
 
         for (let col = 0; col < gridData[row].length; col++) {
-            const cellValue = gridData[row][col];
-            let attribute: string | null = null;
+            const cellContent = gridData[row][col];
 
-            // Determine the attribute for the current cell
-            if (cellValue !== null) {
-                let tmp = cellValue.toString(16);
-                if (tmp === 'f') tmp = '0';
-                attribute = `${tmp}h`;
+            let charCodeForCell: number | null = null;
+            let attributeForCell: number | null = null;
+
+            if (cellContent !== null) {
+                charCodeForCell = cellContent.charCode;
+                attributeForCell = cellContent.attribute;
+
+                // If only attribute exists, default char to space (0x20) for rendering
+                if (charCodeForCell === null && attributeForCell !== null) {
+                    charCodeForCell = 0x20;
+                }
+                // If only char exists, default attribute to white on black (0x07) for rendering
+                if (attributeForCell === null && charCodeForCell !== null) {
+                    attributeForCell = 0x07;
+                }
             }
 
-            // A sequence ends if the current attribute is different from the new one,
-            // or if the current cell is null. If so, render the sequence.
-            if (currentAttribute !== null && (attribute !== currentAttribute || cellValue === null)) {
+            // Check if the current cell's (char, attribute) matches the current sequence
+            const matchesCurrentSequence = (charCodeForCell === currentSequenceChar) && (attributeForCell === currentSequenceAttribute);
+
+            if (!matchesCurrentSequence && (currentSequenceChar !== null || currentSequenceAttribute !== null)) {
+                // Current sequence is ending. Render it.
                 const screen_col = startCol;
-                middle += `\n\tsetcursor ${row}, ${screen_col}\n`;
-                middle += `\trenderc 20h, 0, ${currentAttribute}, ${consecutiveCount}\n`;
+                const charToRender = currentSequenceChar !== null ? `${currentSequenceChar}h` : '20h'; // Default to space if no char
+                const attrToRender = currentSequenceAttribute !== null ? `${currentSequenceAttribute.toString(16).padStart(2, '0')}h` : '07h'; // Default to white on black
 
-                // Reset tracking for the next sequence
-                consecutiveCount = 0; 
-                currentAttribute = null;
+                currentMiddle += `\n\tsetcursor ${row}, ${screen_col}\n`;
+                currentMiddle += `\trenderc ${charToRender}, 0, ${attrToRender}, ${consecutiveCount}\n`;
+
+                // Reset for the next potential sequence
+                consecutiveCount = 0;
+                currentSequenceChar = null;
+                currentSequenceAttribute = null;
             }
 
-            // If the current cell is not empty, either start a new sequence 
-            // or continue the existing one.
-            if (cellValue !== null) {
-                if (currentAttribute === null) {
+            // If the current cell has content (either char or attribute, or both)
+            if (charCodeForCell !== null || attributeForCell !== null) {
+                if (currentSequenceChar === null && currentSequenceAttribute === null) {
                     // This is the start of a new sequence
-                    currentAttribute = attribute;
+                    currentSequenceChar = charCodeForCell;
+                    currentSequenceAttribute = attributeForCell;
                     startCol = col;
                     consecutiveCount = 1;
                 } else {
@@ -142,16 +146,35 @@ function generateTASMCode(gridData: (number | null)[][]): string {
             }
         }
 
-        // After iterating through all columns, a sequence might still be active
-        // if it extends to the end of the row. Render this final sequence.
-        if (currentAttribute !== null) {
+        // After iterating through all columns, render any pending sequence
+        if (currentSequenceChar !== null || currentSequenceAttribute !== null) {
             const screen_col = startCol;
-            middle += `\n\tsetcursor ${row}, ${screen_col}\n`;
-            middle += `\trenderc 20h, 0, ${currentAttribute}, ${consecutiveCount * 2}\n`;
+            const charToRender = currentSequenceChar !== null ? `${currentSequenceChar}h` : '20h';
+            const attrToRender = currentSequenceAttribute !== null ? `${currentSequenceAttribute.toString(16).padStart(2, '0')}h` : '07h';
+
+            currentMiddle += `\n\tsetcursor ${row}, ${screen_col}\n`;
+            currentMiddle += `\trenderc ${charToRender}, 0, ${attrToRender}, ${consecutiveCount}\n`;
         }
     }
 
-    const code: string = start + middle + end;
+    const startCode: string = macros + `
+.model small
+.code
+.stack 100h
+start :
+    ; Set to video mode 
+    mov ah, 00h
+    mov al, 03h ; 80x25 color text mode
+    int 10h\n
+`;
+    const endCode: string = `
+    mov ah, 4Ch      ; DOS exit function
+    mov al, 0        ; Return code 0
+    int 21h          ; Call DOS interrupt
+end start ; end program
+`;
+
+    const code: string = startCode + currentMiddle + endCode;
     console.log('Generated TASM Code:\n', code);
     return code;
 }
@@ -178,7 +201,7 @@ let isBlinkEnabled: boolean = false; // Default: Steady
 
 let cellElements: HTMLDivElement[][] = [];
 let activeCell: HTMLDivElement | null = null;
-let gridData: (number | null)[][] = [];
+let gridData: (CellContent | null)[][] = [];
 
 function saveGridState(): void {
     try {
@@ -217,13 +240,34 @@ const eraseBtn: HTMLElement = document.getElementById('erase-btn') as HTMLButton
 const blinkBtn: HTMLElement = document.getElementById('blink-btn') as HTMLButtonElement;
 const bgColorPanel: HTMLDivElement = document.getElementById('bg-color-panel') as HTMLDivElement;
 const renderBtn: HTMLElement = document.getElementById('render-btn') as HTMLButtonElement;
+const textBtn: HTMLElement = document.getElementById('text-btn') as HTMLButtonElement;
 
 const rowsInput: HTMLInputElement = document.getElementById('rows-input') as HTMLInputElement;
 const colsInput: HTMLInputElement = document.getElementById('cols-input') as HTMLInputElement;
 const resizeBtn: HTMLElement = document.getElementById('resize-btn') as HTMLButtonElement;
 
+
+function focusCell(row: number, col: number): void {
+    if (row < 0 || row >= GRID_ROWS || col < 0 || col >= GRID_COLS) {
+        return;
+    }
+
+
+    if (activeCell) {
+        activeCell.classList.remove('active');
+    
+        renderCell(activeCell, gridData[parseInt(activeCell.dataset.row!)][parseInt(activeCell.dataset.col!)]);
+    }
+
+    activeCell = cellElements[row][col];
+    activeCell.classList.add('active');
+    renderCell(activeCell, gridData[row][col]);
+    activeCell.focus();
+}
+
+
 function createGrid(rows: number, cols: number): void {
-    middle = '';
+    // middle = ''; // No longer necessary to clear global 'middle' directly
     GRID_ROWS = rows;
     GRID_COLS = cols;
 
@@ -237,12 +281,12 @@ function createGrid(rows: number, cols: number): void {
 
     // Try to load the saved grid data
     const savedDataJSON = localStorage.getItem(STORAGE_KEY_GRID_DATA);
-    let savedData: (number | null)[][] | null = null;
+    let savedData: (CellContent | null)[][] | null = null; // Correct type for saved data
     if (savedDataJSON) {
         try {
             savedData = JSON.parse(savedDataJSON);
             // Basic validation to ensure saved data matches dimensions
-            if (savedData?.length !== rows || savedData[0]?.length !== cols) {
+            if (savedData?.length !== rows || (savedData.length > 0 && savedData[0]?.length !== cols)) {
                 savedData = null; // Mismatch, treat as no saved data
                 localStorage.removeItem(STORAGE_KEY_GRID_DATA); // Clean up invalid data
             }
@@ -260,41 +304,75 @@ function createGrid(rows: number, cols: number): void {
             cell.className = 'cell';
             cell.dataset.row = String(i);
             cell.dataset.col = String(j);
-
-            if (j % 2 == 0) {
-                cell.classList.add('dim-border');
-            }
+            cell.tabIndex = 0; // Make cells focusable for keyboard navigation
 
             gridContainer.appendChild(cell);
             cellElements[i][j] = cell;
 
-            const cellValue = savedData?.[i]?.[j] ?? null;
-            gridData[i][j] = cellValue;
+            // Initialize or load cell data
+            // Ensure cellContent is always an object if it has any data from savedData
+            const loadedCellContent = savedData?.[i]?.[j] ?? null;
 
-            renderCell(cell, cellValue);
+            if (loadedCellContent && (loadedCellContent.charCode !== null || loadedCellContent.attribute !== null)) {
+                 gridData[i][j] = { // Ensure it's always a new object to avoid mutation issues with savedData directly
+                    charCode: loadedCellContent.charCode,
+                    attribute: loadedCellContent.attribute
+                };
+            } else {
+                gridData[i][j] = null;
+            }
+           
+            renderCell(cell, gridData[i][j]); // Pass the CellContent object (or null)
         }
     }
     console.log(`Grid created with ${rows} rows and ${cols} columns.`);
-    // localStorage.removeItem(STORAGE_KEY);
+    saveGridState(); // Save the newly initialized or loaded grid state
 }
 
 /**
- * Renders a single cell's appearance based on its 8-bit value.
+ * Renders a single cell's appearance based on its stored data.
  */
-function renderCell(cell: HTMLDivElement, value: number | null): void {
-    if (value === null) {
-        // Style for an erased cell
-        cell.style.backgroundColor = '';
-        cell.style.borderColor = '#555';
-        cell.classList.remove('blinking');
-        cell.classList.remove('selected');
+function renderCell(cell: HTMLDivElement, cellContent: CellContent | null): void {
+    // Reset styles
+    cell.style.backgroundColor = '';
+    cell.style.borderColor = '#555'; // Default border for empty cells
+    cell.classList.remove('blinking');
+    cell.classList.remove('selected');
+    cell.textContent = ''; // Clear existing text content before (re)rendering
+
+    if (cellContent !== null && (cellContent.attribute !== null || cellContent.charCode !== null)) {
+        // Cell has content (either attribute or character or both)
+        let attribute = cellContent.attribute;
+
+        // If a character exists but no explicit attribute is set, use a default
+        // (e.g., white foreground on black background) so the character is visible.
+        if (attribute === null && cellContent.charCode !== null) {
+            attribute = 0x07; // White foreground, black background, non-blinking
+        }
+
+        if (attribute !== null) {
+            const decoded = decodeCellData(attribute);
+            cell.style.backgroundColor = decoded.backgroundColor;
+            cell.style.borderColor = decoded.foregroundColor; // Use border for foreground
+            cell.classList.toggle('blinking', decoded.isBlinking);
+            cell.classList.add('selected'); // Indicate it's a drawn/content cell
+        }
+
+        // Display the character using the CP437 to Unicode mapping.
+        if (cellContent.charCode !== null) {
+            cell.textContent = getUnicodeCharFromCP437(cellContent.charCode);
+        } else if (cellContent.attribute !== null) {
+            // If the cell has an attribute (color) but no specific character,
+            // display a CP437 space character (0x20) by default.
+            cell.textContent = getUnicodeCharFromCP437(0x20); // CP437 for space
+        }
+    }
+
+    // Add visual feedback for the active cell when in text mode
+    if (isTextMode && activeCell === cell) {
+        cell.classList.add('active-text-cell'); // Apply specific styling for the active input cell
     } else {
-        // Style for a drawn cell
-        const decoded = decodeCellData(value);
-        cell.style.backgroundColor = decoded.backgroundColor;
-        cell.style.borderColor = decoded.foregroundColor; // Use border for foreground
-        cell.classList.toggle('blinking', decoded.isBlinking);
-        cell.classList.add('selected');
+        cell.classList.remove('active-text-cell'); // Remove styling if not active or not in text mode
     }
 }
 
@@ -305,19 +383,27 @@ function applyDrawing(cell: HTMLDivElement): void {
     const row: number = parseInt(cell.dataset.row!);
     const col: number = parseInt(cell.dataset.col!);
 
-    let newValue: number | null = null;
+    // Ensure we have an object to work with, even if the cell was previously null
+    let currentCellContent: CellContent = gridData[row][col] || { charCode: null, attribute: null };
 
     if (isErasing) {
-        newValue = null;
-    } else {
-        newValue = encodeCellData({
+        currentCellContent.attribute = null; // Only erase the attribute
+        // If charCode is also null, then the cell becomes completely empty
+        if (currentCellContent.charCode === null) {
+            gridData[row][col] = null;
+        } else {
+            gridData[row][col] = currentCellContent;
+        }
+    } else { // Drawing
+        currentCellContent.attribute = encodeCellData({
             bgIndex: currentBgIndex,
             fgIndex: currentFgIndex,
             isBlinking: isBlinkEnabled
         });
+        gridData[row][col] = currentCellContent;
     }
-    gridData[row][col] = newValue;
-    renderCell(cell, newValue);
+
+    renderCell(cell, gridData[row][col]); // Pass the CellContent object
     saveGridState();
 }
 
@@ -357,7 +443,6 @@ function createColorPanel(
             // Update the state by calling the callback
             onColorSelect(index);
 
-            // TODO: ADD COLOR CHANGE HERE
             app?.style.setProperty('--change-color', BACKGROUND_PALETTE[index]);
 
             // Update the visual selection
@@ -367,8 +452,8 @@ function createColorPanel(
 
             swatch.classList.add('selected');
 
-            // Hide the panel after selection
-            panel.classList.remove('visible');
+            // Hide the panel after selection (if desired, currently always visible)
+            // panel.classList.remove('visible');
         });
 
         panel.appendChild(swatch);
@@ -382,25 +467,40 @@ resizeBtn.addEventListener('click', () => {
     const newCols: number = parseInt(colsInput.value, 10);
 
     if (isNaN(newRows) || isNaN(newCols) || newRows < MIN_ROWS || newCols < MIN_COLS || MAX_COLS < newCols || MAX_ROWS < newRows) {
-        alert(`Please grid within (${MAX_ROWS}x${MAX_COLS}) cells.`);
+        alert(`Please set grid dimensions between (${MIN_ROWS}x${MIN_COLS}) and (${MAX_ROWS}x${MAX_COLS}) cells.`);
         return;
     }
 
-    localStorage.setItem('gridRows', String(newRows));
-    localStorage.setItem('gridCols', String(newCols));
+    // Use STORAGE_KEY_ constants for consistency
+    localStorage.setItem(STORAGE_KEY_GRID_ROWS, String(newRows));
+    localStorage.setItem(STORAGE_KEY_GRID_COLS, String(newCols));
 
-    localStorage.removeItem(STORAGE_KEY_GRID_DATA);
+    localStorage.removeItem(STORAGE_KEY_GRID_DATA); 
 
     createGrid(newRows, newCols);
-    saveGridState();
 });
 
 drawBtn.addEventListener('click', () => {
     if (!isDrawing) {
         isDrawing = true;
         isErasing = false;
+        
+        
+        isTextMode = false; // Exit text mode when drawing
+        
         drawBtn.classList.add('active');
         eraseBtn.classList.remove('active');
+        textBtn.classList.remove('active');
+        // Re-render all cells to clear any 'active-text-cell' styling
+        cellElements.flat().forEach(cell => {
+            const row = parseInt(cell.dataset.row!);
+            const col = parseInt(cell.dataset.col!);
+            renderCell(cell, gridData[row][col]);
+            cell.classList.remove('active'); // Remove general active class too
+        });
+        if (activeCell) {
+            activeCell = null;
+        }
     } else {
         isDrawing = false;
         drawBtn.classList.remove('active');
@@ -411,43 +511,217 @@ eraseBtn.addEventListener('click', () => {
     if (!isErasing) {
         isDrawing = false;
         isErasing = true;
+        isTextMode = false; // Exit text mode when erasing
         eraseBtn.classList.add('active');
         drawBtn.classList.remove('active');
+        textBtn.classList.remove('active');
+        // Re-render all cells to clear any 'active-text-cell' styling
+        cellElements.flat().forEach(cell => {
+            const row = parseInt(cell.dataset.row!);
+            const col = parseInt(cell.dataset.col!);
+            renderCell(cell, gridData[row][col]);
+            cell.classList.remove('active'); // Remove general active class too
+        });
+        if (activeCell) {
+            activeCell = null;
+        }
     } else {
         isErasing = false;
         eraseBtn.classList.remove('active');
     }
 });
 
+textBtn.addEventListener('click', () => {
+    isTextMode = !isTextMode;
+    textBtn.classList.toggle('active', isTextMode);
+
+    if (isTextMode) {
+        // Deactivate drawing/erasing when entering text mode
+        isDrawing = false;
+        isErasing = false;
+        drawBtn.classList.remove('active');
+        eraseBtn.classList.remove('active');
+
+        // Re-render all cells to ensure they are in display mode and clear active states
+        cellElements.flat().forEach(cell => {
+            const row = parseInt(cell.dataset.row!);
+            const col = parseInt(cell.dataset.col!);
+            renderCell(cell, gridData[row][col]);
+            cell.classList.remove('active'); // Clear any lingering 'active' state
+        });
+
+        // Set the first cell as active by default or keep current active if exists
+        if (!activeCell) {
+            activeCell = cellElements[0][0]; // Default to top-left cell
+        }
+        // Use focusCell to activate and highlight
+        focusCell(parseInt(activeCell.dataset.row!), parseInt(activeCell.dataset.col!));
+
+    } else {
+        // Exit text mode
+        if (activeCell) {
+            activeCell.classList.remove('active');
+            renderCell(activeCell, gridData[parseInt(activeCell.dataset.row!)][parseInt(activeCell.dataset.col!)]);
+            activeCell = null;
+        }
+    }
+});
+
+
 blinkBtn.addEventListener('click', () => {
     isBlinkEnabled = !isBlinkEnabled;
     blinkBtn.classList.toggle('active');
 });
 
-gridContainer.addEventListener('mousedown', (e) => {
-    if (!(e.target instanceof HTMLDivElement)) return;
-    const cell = e.target;
-    e.preventDefault();
 
-    // Deactivate any previously active cell
-    if (activeCell) {
-        activeCell.classList.remove('active');
+gridContainer.addEventListener('mousedown', (e) => {
+    let cell: HTMLDivElement | null = e.target as HTMLDivElement;
+    // Ensure we are clicking on a cell, not its children if any were added
+    if (!cell.classList.contains('cell')) {
+        cell = (e.target as HTMLElement).closest('.cell') as HTMLDivElement;
     }
-    
+    if (!cell) return;
+
+    e.preventDefault(); // Prevent default browser drag behavior
+
     if (isTextMode) {
-        // Set the new active cell and highlight it
-        activeCell = cellElements[parseInt(cell.dataset.row!)][parseInt(cell.dataset.col!) * 2]; // Always activate the left cell of the pair
-        activeCell.classList.add('active');
+        const row = parseInt(cell.dataset.row!);
+        const col = parseInt(cell.dataset.col!);
+        focusCell(row, col); // Use the new focusCell helper
         isMouseDown = false; // Prevent dragging in text mode
     } else {
         // Handle drawing/erasing as before
-        activeCell = null; // Ensure no cell is active when not in text mode
+        if (activeCell) { // Clear active state if switching modes or drawing over an active cell
+            activeCell.classList.remove('active');
+            renderCell(activeCell, gridData[parseInt(activeCell.dataset.row!)][parseInt(activeCell.dataset.col!)]);
+            activeCell = null;
+        }
         isMouseDown = true;
         applyDrawing(cell);
     }
 });
 
+document.addEventListener('keydown', (e) => {
+    if (!isTextMode || !activeCell) {
+        return;
+    }
+
+    e.preventDefault();
+
+    const currentRow = parseInt(activeCell.dataset.row!);
+    const currentCol = parseInt(activeCell.dataset.col!);
+
+    let nextRow = currentRow;
+    let nextCol = currentCol;
+    let charTyped = false;
+
+    switch (e.key) {
+        case 'Backspace':
+            let currentCellContentForBackspace = gridData[currentRow][currentCol];
+            if (currentCellContentForBackspace) {
+                currentCellContentForBackspace.charCode = null;
+                if (currentCellContentForBackspace.attribute === null) {
+                    gridData[currentRow][currentCol] = null;
+                } else {
+                    gridData[currentRow][currentCol] = currentCellContentForBackspace;
+                }
+                renderCell(activeCell, gridData[currentRow][currentCol]);
+                saveGridState();
+            }
+            nextCol--;
+            break;
+        case 'Delete':
+            let currentCellContentForDelete = gridData[currentRow][currentCol];
+            if (currentCellContentForDelete) {
+                currentCellContentForDelete.charCode = null;
+                if (currentCellContentForDelete.attribute === null) {
+                    gridData[currentRow][currentCol] = null;
+                } else {
+                    gridData[currentRow][currentCol] = currentCellContentForDelete;
+                }
+                renderCell(activeCell, gridData[currentRow][currentCol]);
+                saveGridState();
+            }
+            // Do not change nextCol/nextRow, stay on the same cell
+            break;
+        case 'ArrowLeft':
+            nextCol--;
+            break;
+        case 'ArrowRight':
+            nextCol++;
+            break;
+        case 'ArrowUp':
+            nextRow--;
+            break;
+        case 'ArrowDown':
+            nextRow++;
+            break;
+        case 'Enter':
+            nextCol++;
+            break;
+        case 'Home':
+            nextCol = 0;
+            break;
+        case 'End':
+            nextCol = GRID_COLS - 1;
+            break;
+        default:
+            if (e.key.length === 1 && !e.ctrlKey && !e.altKey && !e.metaKey) {
+                const charCode = e.key.charCodeAt(0);
+
+                if (charCode >= 0 && charCode <= 255) {
+                    let cellContent: CellContent = gridData[currentRow][currentCol] || { charCode: null, attribute: null };
+
+                    if (cellContent.attribute === null) {
+                        cellContent.attribute = encodeCellData({ bgIndex: 1, fgIndex: 15, isBlinking: false }); // 0x07 for white on black
+                    }
+
+                    cellContent.charCode = charCode;
+                    gridData[currentRow][currentCol] = cellContent;
+
+                    // Update the active cell's text content using CP437 mapping
+                    activeCell.textContent = getUnicodeCharFromCP437(charCode);
+
+                    saveGridState();
+                    charTyped = true;
+                }
+            }
+            break;
+    }
+
+    if (charTyped) {
+        nextCol++;
+    }
+
+    // Handle grid boundary and wrap-around for navigation
+    if (nextCol < 0) {
+        nextCol = GRID_COLS - 1;
+        nextRow--;
+    } else if (nextCol >= GRID_COLS) {
+        nextCol = 0;
+        nextRow++;
+    }
+
+    if (nextRow < 0) {
+        nextRow = GRID_ROWS - 1;
+    } else if (nextRow >= GRID_ROWS) {
+        nextRow = 0;
+    }
+
+    if (nextRow !== currentRow || nextCol !== currentCol || charTyped) {
+        focusCell(nextRow, nextCol);
+    }
+});
+
 renderBtn.addEventListener('click', () => {
+    // Before generating, ensure the currently active cell's input is visually rendered
+    if (isTextMode && activeCell) {
+        const row = parseInt(activeCell.dataset.row!);
+        const col = parseInt(activeCell.dataset.col!);
+        // Force a re-render to ensure textContent matches gridData for the active cell
+        renderCell(activeCell, gridData[row][col]); 
+    }
+
     const tasmCode = generateTASMCode(gridData);
     navigator.clipboard.writeText(tasmCode).then(() => {
         alert('TASM code copied to clipboard!');
@@ -458,9 +732,17 @@ renderBtn.addEventListener('click', () => {
 });
 
 gridContainer.addEventListener('mousemove', (e) => {
+    if (isTextMode) return; // Prevent drawing if in text mode
     if (!isMouseDown || !(e.target instanceof HTMLDivElement)) return;
     e.preventDefault();
-    applyDrawing(e.target);
+    // Ensure the target is a cell before applying drawing
+    let cell: HTMLDivElement | null = e.target as HTMLDivElement;
+    if (!cell.classList.contains('cell')) {
+        cell = (e.target as HTMLElement).closest('.cell') as HTMLDivElement;
+    }
+    if (cell) {
+        applyDrawing(cell);
+    }
 });
 
 window.addEventListener('mouseup', () => {
