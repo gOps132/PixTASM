@@ -123,7 +123,7 @@ function generateTASMCode(gridData: (CellContent | null)[][]): string {
                 const attrToRender = currentSequenceAttribute !== null ? `${currentSequenceAttribute.toString(16).padStart(2, '0')}h` : '07h'; // Default to white on black
 
                 currentMiddle += `\n\tsetcursor ${row}, ${screen_col}\n`;
-                currentMiddle += `\trenderc ${charToRender}, 0, ${attrToRender}, ${consecutiveCount}\n`;
+                currentMiddle += `\trenderc 20h, 0, ${attrToRender}, ${consecutiveCount}\n`;
 
                 // Reset for the next potential sequence
                 consecutiveCount = 0;
