@@ -30,7 +30,10 @@ if (!app) throw new Error('Failed to find the app element');
 
 app.innerHTML = `
 <div class="tools">
-    <div id="bg-color-panel" class="color-panel"></div>
+    <div id="color-palettes-container" class="color-palettes-container hidden">
+        <div id="bg-color-panel" class="color-panel"></div>
+        <div id="fg-color-panel" class="color-panel"></div>
+    </div>    
     <div class="controls">
         <input type="number" id="rows-input" class="size-input" value="10" min="1" max="25">
         <input type="number" id="cols-input" class="size-input" value="10" min="1" max="80">
@@ -77,6 +80,34 @@ setcursor MACRO row, col
     mov dl, col
     int 10h
 ENDM
+colorz MACRO color, write
+    mov ah, 09h 
+    mov bl, color
+    mov cx, write; how many times to write
+    int 10h
+ENDM
+.model small
+.data
+.code
+`;
+
+    const startCode: string = macros + `
+.stack 100h
+start :
+    mov ax, @data
+    mov ds, ax
+
+    ; Set to video mode 
+    mov ah, 00h
+    mov al, 03h ; 80x25 color text mode
+    int 10h\n
+`; // EVERYTHING COMES AFTER HERE
+
+    const endCode: string = `
+    mov ah, 4Ch      ; DOS exit function
+    mov al, 0        ; Return code 0
+    int 21h          ; Call DOS interrupt
+end start ; end program
 `;
 
 interface CellContent {
@@ -85,98 +116,138 @@ interface CellContent {
 }
 
 function generateTASMCode(gridData: (CellContent | null)[][]): string {
-    let currentMiddle = ''; 
+    let currentMiddleCode = '';
+    let string_data_declarations = '';
+    let stringCounter = 0;
 
     for (let row = 0; row < gridData.length; row++) {
-        let consecutiveCount = 0;
-        let startCol = -1;
-        let currentSequenceChar: number | null = null;
-        let currentSequenceAttribute: number | null = null;
+        let col = 0;
+        while (col < gridData[row].length) {
+            const cell = gridData[row][col];
 
-        for (let col = 0; col < gridData[row].length; col++) {
-            const cellContent = gridData[row][col];
+            if (cell === null || (cell.charCode === null && cell.attribute === null)) {
+                col++;
+                continue;
+            }
 
-            let charCodeForCell: number | null = null;
-            let attributeForCell: number | null = null;
+            let segmentStartCol = col;
+            let currentAttribute = cell.attribute !== null ? cell.attribute : 0x07;
 
-            if (cellContent !== null) {
-                charCodeForCell = cellContent.charCode;
-                attributeForCell = cellContent.attribute;
+            // --- Attempt to form a 'text string' sequence for DOS `int 21h, ah=09h` ---
+            // A text string consists of consecutive cells with characters and the same attribute,
+            // and importantly, no '$' characters which act as terminators for `int 21h, ah=09h`.
+            if (cell.charCode !== null && cell.charCode !== 36) { // Don't start a string if the character is '$'
+                let textSegmentChars: number[] = [];
+                let currentSegmentCol = col;
 
-                // If only attribute exists, default char to space (0x20) for rendering
-                if (charCodeForCell === null && attributeForCell !== null) {
-                    charCodeForCell = 0x20;
+                // Accumulate characters for the string segment
+                while (currentSegmentCol < gridData[row].length) {
+                    const nextCell = gridData[row][currentSegmentCol];
+                    const nextCharCode = nextCell?.charCode;
+                    const nextAttribute = nextCell && nextCell.attribute !== null ? nextCell.attribute : 0x07;
+
+                    // Conditions to continue a text string:
+                    // 1. A character exists (`nextCharCode !== null`).
+                    // 2. The attribute matches the current segment's attribute (`nextAttribute === currentAttribute`).
+                    // 3. The character is not '$' (ASCII 36), which would terminate the DOS string.
+                    if (nextCharCode !== null && nextAttribute === currentAttribute && nextCharCode !== 36) {
+                        if (nextCharCode !== undefined) {
+                            textSegmentChars.push(nextCharCode);
+                        }
+                        currentSegmentCol++;
+                    } else {
+                        break; // Condition not met, string segment ends
+                    }
                 }
-                // If only char exists, default attribute to white on black (0x07) for rendering
-                if (attributeForCell === null && charCodeForCell !== null) {
-                    attributeForCell = 0x07;
+
+                if (textSegmentChars.length > 0) {
+                    // We successfully found a text string segment
+                    const label = `txt_${stringCounter++}_R${row}_C${segmentStartCol}`;
+                    let stringLiteral = '';
+                    for (const charCode of textSegmentChars) {
+                        const char = String.fromCharCode(charCode);
+                        if (char === '"') {
+                            stringLiteral += '""'; // Escape double quotes for TASM string literals
+                        } else {
+                            stringLiteral += char;
+                        }
+                    }
+
+                    string_data_declarations += `\t${label} db "${stringLiteral}",'$'\n`;
+
+                    // Generate the TASM instructions to display this string
+                    currentMiddleCode += `\n\tsetcursor ${row}, ${segmentStartCol}\n`;
+                    if (currentAttribute !== 0x07) { // Only set color if it's not the default white on black
+                        currentMiddleCode += `\tcolorz ${currentAttribute.toString(16).padStart(2, '0')}h, ${textSegmentChars.length}\n`;
+                    }
+                    currentMiddleCode += `\tmov ah, 09h\n`;
+                    currentMiddleCode += `\tmov dx, offset ${label}\n`;
+                    currentMiddleCode += `\tint 21h\n`;
+
+                    col = currentSegmentCol; // Move 'col' past the processed string segment
+                    continue; // Continue to the next part of the row
                 }
             }
 
-            // Check if the current cell's (char, attribute) matches the current sequence
-            const matchesCurrentSequence = (charCodeForCell === currentSequenceChar) && (attributeForCell === currentSequenceAttribute);
+            // --- Fallback to 'renderc' macro for blocks or single problematic characters (like '$') ---
+            // This path is taken if:
+            // - The cell has no charCode (attribute-only block).
+            // - The charCode is '$' (which terminates DOS strings, so we render it individually).
+            // - A text string could not be formed for other reasons (e.g., attribute change).
+            let renderChar = cell.charCode !== null ? cell.charCode : 0x20; // Use actual charCode or space (0x20) for blocks
+            let renderAttribute = cell.attribute !== null ? cell.attribute : 0x07;
 
-            if (!matchesCurrentSequence && (currentSequenceChar !== null || currentSequenceAttribute !== null)) {
-                // Current sequence is ending. Render it.
-                const screen_col = startCol;
-                const charToRender = currentSequenceChar !== null ? `${currentSequenceChar}h` : '20h'; // Default to space if no char
-                const attrToRender = currentSequenceAttribute !== null ? `${currentSequenceAttribute.toString(16).padStart(2, '0')}h` : '07h'; // Default to white on black
+            let consecutiveRenderCount = 0;
+            let currentRenderCol = col;
 
-                currentMiddle += `\n\tsetcursor ${row}, ${screen_col}\n`;
-                currentMiddle += `\trenderc 20h, 0, ${attrToRender}, ${consecutiveCount}\n`;
+            // Find consecutive cells that can be rendered with the same char and attribute using `renderc`
+            while (currentRenderCol < gridData[row].length) {
+                const nextCell = gridData[row][currentRenderCol];
+                // Determine charCode and attribute for comparison, defaulting to space/white-on-black if null
+                const nextRenderChar = nextCell && nextCell.charCode !== null ? nextCell.charCode : 0x20;
+                const nextRenderAttribute = nextCell && nextCell.attribute !== null ? nextCell.attribute : 0x07;
 
-                // Reset for the next potential sequence
-                consecutiveCount = 0;
-                currentSequenceChar = null;
-                currentSequenceAttribute = null;
-            }
-
-            // If the current cell has content (either char or attribute, or both)
-            if (charCodeForCell !== null || attributeForCell !== null) {
-                if (currentSequenceChar === null && currentSequenceAttribute === null) {
-                    // This is the start of a new sequence
-                    currentSequenceChar = charCodeForCell;
-                    currentSequenceAttribute = attributeForCell;
-                    startCol = col;
-                    consecutiveCount = 1;
+                // Check if the next cell matches the current 'renderc' segment's char and attribute
+                if (nextRenderChar === renderChar && nextRenderAttribute === renderAttribute) {
+                    consecutiveRenderCount++;
+                    currentRenderCol++;
                 } else {
-                    // This is a continuation of the current sequence
-                    consecutiveCount++;
+                    break; // Mismatch, this 'renderc' segment ends
                 }
             }
-        }
 
-        // After iterating through all columns, render any pending sequence
-        if (currentSequenceChar !== null || currentSequenceAttribute !== null) {
-            const screen_col = startCol;
-            const charToRender = currentSequenceChar !== null ? `${currentSequenceChar}h` : '20h';
-            const attrToRender = currentSequenceAttribute !== null ? `${currentSequenceAttribute.toString(16).padStart(2, '0')}h` : '07h';
-
-            currentMiddle += `\n\tsetcursor ${row}, ${screen_col}\n`;
-            currentMiddle += `\trenderc ${charToRender}, 0, ${attrToRender}, ${consecutiveCount}\n`;
+            if (consecutiveRenderCount > 0) {
+                // Generate TASM instructions to render this block segment
+                currentMiddleCode += `\n\tsetcursor ${row}, ${segmentStartCol}\n`;
+                currentMiddleCode += `\trenderc ${renderChar.toString(16).padStart(2, '0')}h, 0, ${renderAttribute.toString(16).padStart(2, '0')}h, ${consecutiveRenderCount}\n`;
+                col = currentRenderCol; // Move 'col' past the processed 'renderc' segment
+            } else {
+                col++; // Fallback, should ideally not be reached if logic is sound
+            }
         }
     }
 
-    const startCode: string = macros + `
-.model small
-.code
-.stack 100h
-start :
-    ; Set to video mode 
-    mov ah, 00h
-    mov al, 03h ; 80x25 color text mode
-    int 10h\n
-`;
-    const endCode: string = `
-    mov ah, 4Ch      ; DOS exit function
-    mov al, 0        ; Return code 0
-    int 21h          ; Call DOS interrupt
-end start ; end program
-`;
+    // --- Assemble the final TASM code ---
+    // The user's `startCode` already includes `macros`, `.model small`, `.code`, and `.data`.
+    // We need to inject our generated `string_data_declarations` right after the `.data` directive.
+    const dataDirectiveIndex = startCode.lastIndexOf('.data\n'); // Find the last `.data` directive
 
-    const code: string = startCode + currentMiddle + endCode;
-    console.log('Generated TASM Code:\n', code);
-    return code;
+    let finalTASMCode = '';
+    if (dataDirectiveIndex !== -1) {
+        // Insert string declarations after the `.data` directive in the `startCode`
+        finalTASMCode = startCode.substring(0, dataDirectiveIndex + '.data\n'.length);
+        finalTASMCode += string_data_declarations;
+        finalTASMCode += startCode.substring(dataDirectiveIndex + '.data\n'.length);
+    } else {
+        // Fallback: if `.data` directive is not found (unlikely with provided code), just append data
+        finalTASMCode = startCode + string_data_declarations;
+    }
+
+    finalTASMCode += currentMiddleCode;
+    finalTASMCode += endCode;          
+
+    console.log('Generated TASM Code:\n', finalTASMCode);
+    return finalTASMCode;
 }
 
 // --- STATE MANAGEMENT ---
@@ -186,7 +257,7 @@ let GRID_COLS: number = 10;
 const MIN_ROWS: number = 1;
 const MIN_COLS: number = 1;
 
-const MAX_ROWS: number = 25; // actual code 0 indexed
+const MAX_ROWS: number = 24;
 const MAX_COLS: number = 80;
 
 let isErasing: boolean = false;
@@ -239,6 +310,7 @@ const drawBtn: HTMLElement = document.getElementById('draw-btn') as HTMLButtonEl
 const eraseBtn: HTMLElement = document.getElementById('erase-btn') as HTMLButtonElement;
 const blinkBtn: HTMLElement = document.getElementById('blink-btn') as HTMLButtonElement;
 const bgColorPanel: HTMLDivElement = document.getElementById('bg-color-panel') as HTMLDivElement;
+const fgColorPanel: HTMLDivElement = document.getElementById('fg-color-panel') as HTMLDivElement;
 const renderBtn: HTMLElement = document.getElementById('render-btn') as HTMLButtonElement;
 const textBtn: HTMLElement = document.getElementById('text-btn') as HTMLButtonElement;
 
@@ -267,7 +339,6 @@ function focusCell(row: number, col: number): void {
 
 
 function createGrid(rows: number, cols: number): void {
-    // middle = ''; // No longer necessary to clear global 'middle' directly
     GRID_ROWS = rows;
     GRID_COLS = cols;
 
@@ -344,6 +415,8 @@ function renderCell(cell: HTMLDivElement, cellContent: CellContent | null): void
         // Cell has content (either attribute or character or both)
         let attribute = cellContent.attribute;
 
+        // TODO: Use the foreground pallete instead of magic values
+
         // If a character exists but no explicit attribute is set, use a default
         // (e.g., white foreground on black background) so the character is visible.
         if (attribute === null && cellContent.charCode !== null) {
@@ -412,9 +485,14 @@ function applyDrawing(cell: HTMLDivElement): void {
 loadGridState();
 createGrid(GRID_ROWS, GRID_COLS);
 app.appendChild(gridContainer);
-createColorPanel(bgColorPanel, BACKGROUND_PALETTE, (selectedIndex) => {
+createColorPanel(bgColorPanel, BACKGROUND_PALETTE, currentBgIndex, (selectedIndex) => {
     currentBgIndex = selectedIndex;
     console.log(`Background color index set to: ${currentBgIndex}`);
+});
+
+createColorPanel(fgColorPanel, FOREGROUND_PALETTE, currentFgIndex, (selectedIndex) => {
+    currentFgIndex = selectedIndex;
+    console.log(`Foreground color index set to: ${currentFgIndex}`);
 });
 
 // ----------------------
@@ -424,6 +502,7 @@ createColorPanel(bgColorPanel, BACKGROUND_PALETTE, (selectedIndex) => {
 function createColorPanel(
     panel: HTMLDivElement,
     palette: readonly string[],
+    initialSelectedIndex: number, // Added this parameter
     onColorSelect: (index: number) => void) {
 
     panel.innerHTML = ''; // Clear any existing swatches
@@ -434,8 +513,8 @@ function createColorPanel(
         swatch.style.backgroundColor = color;
         swatch.dataset.colorIndex = String(index);
 
-        // Set the initial selected swatch
-        if (index === currentBgIndex) {
+        // Set the initial selected swatch based on the new parameter
+        if (index === initialSelectedIndex) {
             swatch.classList.add('selected');
         }
 
@@ -443,17 +522,17 @@ function createColorPanel(
             // Update the state by calling the callback
             onColorSelect(index);
 
-            app?.style.setProperty('--change-color', BACKGROUND_PALETTE[index]);
-
-            // Update the visual selection
+            // Update the visual selection for this specific panel
             panel.querySelectorAll('.color-swatch').forEach((sw) => {
                 sw.classList.remove('selected')
             });
 
             swatch.classList.add('selected');
 
-            // Hide the panel after selection (if desired, currently always visible)
-            // panel.classList.remove('visible');
+            // Optionally, update the `--change-color` if this is the background panel
+            if (panel === bgColorPanel) {
+                app?.style.setProperty('--change-color', BACKGROUND_PALETTE[index]);
+            }
         });
 
         panel.appendChild(swatch);
@@ -673,7 +752,7 @@ document.addEventListener('keydown', (e) => {
                     let cellContent: CellContent = gridData[currentRow][currentCol] || { charCode: null, attribute: null };
 
                     if (cellContent.attribute === null) {
-                        cellContent.attribute = encodeCellData({ bgIndex: 1, fgIndex: 15, isBlinking: false }); // 0x07 for white on black
+                        cellContent.attribute = encodeCellData({ bgIndex: currentBgIndex, fgIndex: currentFgIndex, isBlinking: isBlinkEnabled });
                     }
 
                     cellContent.charCode = charCode;
