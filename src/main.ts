@@ -67,10 +67,10 @@ putc MACRO char
 ENDM
 renderc MACRO char, page, color, write
     mov ah, 09h 
-    mov al, char ; character to write
-    mov bh, page ; page number
+    mov al, char
+    mov bh, page
     mov bl, color
-    mov cx, write; how many times to write
+    mov cx, write
     int 10h
 ENDM
 setcursor MACRO row, col
@@ -83,7 +83,7 @@ ENDM
 colorz MACRO color, write
     mov ah, 09h 
     mov bl, color
-    mov cx, write; how many times to write
+    mov cx, write
     int 10h
 ENDM
 .model small
@@ -327,7 +327,7 @@ function focusCell(row: number, col: number): void {
 
     if (activeCell) {
         activeCell.classList.remove('active');
-    
+        // activeCell.classList.remove('active-text-cell'); 
         renderCell(activeCell, gridData[parseInt(activeCell.dataset.row!)][parseInt(activeCell.dataset.col!)]);
     }
 
@@ -408,14 +408,12 @@ function renderCell(cell: HTMLDivElement, cellContent: CellContent | null): void
     cell.style.backgroundColor = '';
     cell.style.borderColor = '#555'; // Default border for empty cells
     cell.classList.remove('blinking');
-    cell.classList.remove('selected');
+    // cell.classList.remove('selected');
     cell.textContent = ''; // Clear existing text content before (re)rendering
 
     if (cellContent !== null && (cellContent.attribute !== null || cellContent.charCode !== null)) {
         // Cell has content (either attribute or character or both)
         let attribute = cellContent.attribute;
-
-        // TODO: Use the foreground pallete instead of magic values
 
         // If a character exists but no explicit attribute is set, use a default
         // (e.g., white foreground on black background) so the character is visible.
@@ -426,9 +424,8 @@ function renderCell(cell: HTMLDivElement, cellContent: CellContent | null): void
         if (attribute !== null) {
             const decoded = decodeCellData(attribute);
             cell.style.backgroundColor = decoded.backgroundColor;
-            cell.style.borderColor = decoded.foregroundColor; // Use border for foreground
+            cell.style.color = decoded.foregroundColor;
             cell.classList.toggle('blinking', decoded.isBlinking);
-            cell.classList.add('selected'); // Indicate it's a drawn/content cell
         }
 
         // Display the character using the CP437 to Unicode mapping.
@@ -439,13 +436,6 @@ function renderCell(cell: HTMLDivElement, cellContent: CellContent | null): void
             // display a CP437 space character (0x20) by default.
             cell.textContent = getUnicodeCharFromCP437(0x20); // CP437 for space
         }
-    }
-
-    // Add visual feedback for the active cell when in text mode
-    if (isTextMode && activeCell === cell) {
-        cell.classList.add('active-text-cell'); // Apply specific styling for the active input cell
-    } else {
-        cell.classList.remove('active-text-cell'); // Remove styling if not active or not in text mode
     }
 }
 
@@ -753,6 +743,10 @@ document.addEventListener('keydown', (e) => {
 
                     if (cellContent.attribute === null) {
                         cellContent.attribute = encodeCellData({ bgIndex: currentBgIndex, fgIndex: currentFgIndex, isBlinking: isBlinkEnabled });
+                    } else {
+                         // If an attribute exists, decode it to preserve existing bg/blink settings
+                         const decoded = decodeCellData(cellContent.attribute);
+                         cellContent.attribute = encodeCellData({ bgIndex: currentBgIndex, fgIndex: currentFgIndex, isBlinking: decoded.isBlinking });
                     }
 
                     cellContent.charCode = charCode;
@@ -760,6 +754,7 @@ document.addEventListener('keydown', (e) => {
 
                     // Update the active cell's text content using CP437 mapping
                     activeCell.textContent = getUnicodeCharFromCP437(charCode);
+                    renderCell(activeCell, gridData[currentRow][currentCol]); // Re-render to show updated foreground color and character
 
                     saveGridState();
                     charTyped = true;
@@ -792,6 +787,7 @@ document.addEventListener('keydown', (e) => {
     }
 });
 
+
 renderBtn.addEventListener('click', () => {
     // Before generating, ensure the currently active cell's input is visually rendered
     if (isTextMode && activeCell) {
@@ -811,7 +807,7 @@ renderBtn.addEventListener('click', () => {
 });
 
 gridContainer.addEventListener('mousemove', (e) => {
-    if (isTextMode) return; // Prevent drawing if in text mode
+    if (isTextMode || !isDrawing) return; // Prevent drawing if in text mode
     if (!isMouseDown || !(e.target instanceof HTMLDivElement)) return;
     e.preventDefault();
     // Ensure the target is a cell before applying drawing
