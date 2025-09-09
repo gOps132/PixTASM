@@ -408,7 +408,6 @@ function renderCell(cell: HTMLDivElement, cellContent: CellContent | null): void
     cell.style.backgroundColor = '';
     cell.style.borderColor = '#555'; // Default border for empty cells
     cell.classList.remove('blinking');
-    // cell.classList.remove('selected');
     cell.textContent = ''; // Clear existing text content before (re)rendering
 
     if (cellContent !== null && (cellContent.attribute !== null || cellContent.charCode !== null)) {
@@ -644,16 +643,16 @@ blinkBtn.addEventListener('click', () => {
 
 
 gridContainer.addEventListener('mousedown', (e) => {
-    if (!isDrawing || isTextMode) return;
     let cell: HTMLDivElement | null = e.target as HTMLDivElement;
     // Ensure we are clicking on a cell, not its children if any were added
     if (!cell.classList.contains('cell')) {
         cell = (e.target as HTMLElement).closest('.cell') as HTMLDivElement;
     }
     if (!cell) return;
-
+    
     e.preventDefault(); // Prevent default browser drag behavior
-
+    
+    
     if (isTextMode) {
         const row = parseInt(cell.dataset.row!);
         const col = parseInt(cell.dataset.col!);
@@ -667,6 +666,7 @@ gridContainer.addEventListener('mousedown', (e) => {
             activeCell = null;
         }
         isMouseDown = true;
+        if (!isDrawing || isTextMode) return;
         applyDrawing(cell);
     }
 });

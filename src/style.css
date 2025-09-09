@@ -44,9 +44,7 @@ body {
   margin: 0 auto;
 
   max-height: 70vh;
-  min-height: 45vh;
-
-  height: 25rem;
+  min-height: 50vh;
 
   user-select: none;
   overflow: auto;
