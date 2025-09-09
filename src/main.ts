@@ -644,6 +644,7 @@ blinkBtn.addEventListener('click', () => {
 
 
 gridContainer.addEventListener('mousedown', (e) => {
+    if (!isDrawing || isTextMode) return;
     let cell: HTMLDivElement | null = e.target as HTMLDivElement;
     // Ensure we are clicking on a cell, not its children if any were added
     if (!cell.classList.contains('cell')) {
