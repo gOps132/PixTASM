@@ -2,13 +2,12 @@
  * TODO:
  *  [/] basic drawing functionality
  *  [/] grid size selection
- *  [X] grid size persistence (fixed inconsistencies)
  *  [/] erasing functionality
  *  [/] color selection
- *  [ ] save/load functionality (grid data persistence is done, full save/load UI not yet)
+ *  [/] save/load functionality (grid data persistence is done, full save/load UI not yet)
  *  [/] export functionality (tasm)
- *  [ ] Add blinking (actually important for intensity)
- *  [X] Add ascii characters to blocks (finally can use the foreground color)
+ *  [/] Add blinking (actually important for intensity)
+ *  [/] Add ascii characters to blocks (finally can use the foreground color)
  *      * maybe a toggle button to switch between ascii and block mode
  */
 
