@@ -454,7 +454,7 @@ function applyDrawing(cell: HTMLDivElement): void {
     } else { // Drawing
         currentCellContent.attribute = encodeCellData({
             bgIndex: currentBgIndex,
-            fgIndex: currentFgIndex,
+            fgIndex: currentFgIndex, // cell doesn't override
             isBlinking: isBlinkEnabled
         });
         gridData[row][col] = currentCellContent;
