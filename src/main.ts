@@ -9,6 +9,9 @@
  *  [/] Add blinking (actually important for intensity)
  *  [/] Add ascii characters to blocks (finally can use the foreground color)
  *      * maybe a toggle button to switch between ascii and block mode
+ *  [ ] Add copy paste
+ *  [ ] Add fill
+ *  [ ] Add cp437 guide
  */
 
 import './style.css';
@@ -411,11 +414,8 @@ function renderCell(cell: HTMLDivElement, cellContent: CellContent | null): void
     cell.textContent = ''; // Clear existing text content before (re)rendering
 
     if (cellContent !== null && (cellContent.attribute !== null || cellContent.charCode !== null)) {
-        // Cell has content (either attribute or character or both)
         let attribute = cellContent.attribute;
 
-        // If a character exists but no explicit attribute is set, use a default
-        // (e.g., white foreground on black background) so the character is visible.
         if (attribute === null && cellContent.charCode !== null) {
             attribute = 0x07; // White foreground, black background, non-blinking
         }
@@ -445,25 +445,32 @@ function applyDrawing(cell: HTMLDivElement): void {
     const row: number = parseInt(cell.dataset.row!);
     const col: number = parseInt(cell.dataset.col!);
 
-    // Ensure we have an object to work with, even if the cell was previously null
     let currentCellContent: CellContent = gridData[row][col] || { charCode: null, attribute: null };
 
     if (isErasing) {
         currentCellContent.attribute = null;
         currentCellContent.charCode = null;
-    } else { // Drawing
+        gridData[row][col] = null;
+    } else if (isBlinkEnabled && !isDrawing && currentCellContent.attribute !== null) {
+        const decoded = decodeCellData(currentCellContent.attribute);
+        currentCellContent.attribute = encodeCellData({
+            bgIndex: BACKGROUND_PALETTE.indexOf(decoded.backgroundColor),
+            fgIndex: FOREGROUND_PALETTE.indexOf(decoded.foregroundColor),
+            isBlinking: !decoded.isBlinking
+        });
+        gridData[row][col] = currentCellContent;
+    } else if (isDrawing) {
         currentCellContent.attribute = encodeCellData({
             bgIndex: currentBgIndex,
-            fgIndex: currentFgIndex, // cell doesn't override
+            fgIndex: currentFgIndex,
             isBlinking: isBlinkEnabled
         });
         gridData[row][col] = currentCellContent;
     }
 
-    renderCell(cell, gridData[row][col]); // Pass the CellContent object
+    renderCell(cell, gridData[row][col]);
     saveGridState();
 }
-
 
 // --- INITIALIZATION --- 
 loadGridState();
@@ -644,27 +651,35 @@ gridContainer.addEventListener('mousedown', (e) => {
         cell = (e.target as HTMLElement).closest('.cell') as HTMLDivElement;
     }
     if (!cell) return;
-    
+
     e.preventDefault(); // Prevent default browser drag behavior
-    
-    
+
     if (isTextMode) {
         const row = parseInt(cell.dataset.row!);
         const col = parseInt(cell.dataset.col!);
-        focusCell(row, col); // Use the new focusCell helper
+        focusCell(row, col);
         isMouseDown = false; // Prevent dragging in text mode
-    } else {
-        // Handle drawing/erasing as before
-        if (activeCell) { // Clear active state if switching modes or drawing over an active cell
-            activeCell.classList.remove('active');
-            renderCell(activeCell, gridData[parseInt(activeCell.dataset.row!)][parseInt(activeCell.dataset.col!)]);
-            activeCell = null;
-        }
-        isMouseDown = true;
-        if (!isDrawing || isTextMode) return;
+        return; // Exit if in text mode
+    }
+
+    // Clear active cell state if not in text mode
+    if (activeCell) {
+        activeCell.classList.remove('active');
+        renderCell(activeCell, gridData[parseInt(activeCell.dataset.row!)][parseInt(activeCell.dataset.col!)]);
+        activeCell = null;
+    }
+    isMouseDown = true; // Set mouse down for potential dragging
+
+    const shouldCallApplyDrawing =
+        isDrawing ||
+        isErasing ||
+        (isBlinkEnabled && !isDrawing && !isErasing); // This condition specifically targets the blink-toggle mode
+
+    if (shouldCallApplyDrawing) {
         applyDrawing(cell);
     }
 });
+
 
 document.addEventListener('keydown', (e) => {
     if (!isTextMode || !activeCell) {
@@ -803,15 +818,21 @@ renderBtn.addEventListener('click', () => {
 });
 
 gridContainer.addEventListener('mousemove', (e) => {
-    if (isTextMode || !isMouseDown || !(isDrawing || isErasing)) return; 
     if (!isMouseDown || !(e.target instanceof HTMLDivElement)) return;
     e.preventDefault();
-    // Ensure the target is a cell before applying drawing
+
     let cell: HTMLDivElement | null = e.target as HTMLDivElement;
     if (!cell.classList.contains('cell')) {
         cell = (e.target as HTMLElement).closest('.cell') as HTMLDivElement;
     }
-    if (cell) {
+    if (!cell) return;
+
+    const shouldCallApplyDrawing =
+        isDrawing ||
+        isErasing ||
+        (isBlinkEnabled && !isDrawing && !isErasing);
+
+    if (shouldCallApplyDrawing) {
         applyDrawing(cell);
     }
 });
