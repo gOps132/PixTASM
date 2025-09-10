@@ -177,7 +177,8 @@ function generateTASMCode(gridData: (CellContent | null)[][]): string {
                     // Generate the TASM instructions to display this string
                     currentMiddleCode += `\n\tsetcursor ${row}, ${segmentStartCol}\n`;
                     if (currentAttribute !== 0x07) { // Only set color if it's not the default white on black
-                        currentMiddleCode += `\tcolorz ${currentAttribute.toString(16).padStart(2, '0')}h, ${textSegmentChars.length}\n`;
+                        // currentMiddleCode += `\tcolorz ${currentAttribute.toString(16).padStart(2, '0')}h, ${textSegmentChars.length}\n`;
+                        currentMiddleCode += `\tcolorz ${currentAttribute.toString(10)}, ${textSegmentChars.length}\n`;
                     }
                     currentMiddleCode += `\tmov ah, 09h\n`;
                     currentMiddleCode += `\tmov dx, offset ${label}\n`;
@@ -218,7 +219,7 @@ function generateTASMCode(gridData: (CellContent | null)[][]): string {
             if (consecutiveRenderCount > 0) {
                 // Generate TASM instructions to render this block segment
                 currentMiddleCode += `\n\tsetcursor ${row}, ${segmentStartCol}\n`;
-                currentMiddleCode += `\trenderc ${renderChar.toString(16).padStart(2, '0')}h, 0, ${renderAttribute.toString(16).padStart(2, '0')}h, ${consecutiveRenderCount}\n`;
+                currentMiddleCode += `\trenderc ${renderChar.toString(10)}, 0, ${renderAttribute.toString(16).padStart(2, '0')}h, ${consecutiveRenderCount}\n`;
                 col = currentRenderCol; // Move 'col' past the processed 'renderc' segment
             } else {
                 col++; // Fallback, should ideally not be reached if logic is sound
