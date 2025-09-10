@@ -449,13 +449,8 @@ function applyDrawing(cell: HTMLDivElement): void {
     let currentCellContent: CellContent = gridData[row][col] || { charCode: null, attribute: null };
 
     if (isErasing) {
-        currentCellContent.attribute = null; // Only erase the attribute
-        // If charCode is also null, then the cell becomes completely empty
-        if (currentCellContent.charCode === null) {
-            gridData[row][col] = null;
-        } else {
-            gridData[row][col] = currentCellContent;
-        }
+        currentCellContent.attribute = null;
+        currentCellContent.charCode = null;
     } else { // Drawing
         currentCellContent.attribute = encodeCellData({
             bgIndex: currentBgIndex,
@@ -808,7 +803,7 @@ renderBtn.addEventListener('click', () => {
 });
 
 gridContainer.addEventListener('mousemove', (e) => {
-    if (isTextMode || !isDrawing) return; // Prevent drawing if in text mode
+    if (isTextMode || !isMouseDown || !(isDrawing || isErasing)) return; 
     if (!isMouseDown || !(e.target instanceof HTMLDivElement)) return;
     e.preventDefault();
     // Ensure the target is a cell before applying drawing
