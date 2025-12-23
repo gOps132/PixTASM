@@ -271,6 +271,12 @@ body {
   gap: 0.5rem;
 }
 
+.file-actions {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 0.5rem;
+}
+
 .color-palettes {
   display: flex;
   flex-direction: column;

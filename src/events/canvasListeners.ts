@@ -11,6 +11,7 @@ import { generateSpriteDB } from '../tasm/spritedb_generator';
 import { encodeCellData, decodeCellData } from '../color';
 import { runTASMCode, stopDosEmulator, preloadDosEmulator } from '../emulator/dosEmulator';
 import { getSavesList, saveProject, deleteProject } from '../storage/saveLoad';
+import { copyShareURL, loadFromURL } from '../sharing/share';
 import type { CellContent } from '../types';
 
 export function initializeCanvasEventListeners(): void {
@@ -350,7 +351,6 @@ export function initializeCanvasEventListeners(): void {
         }
         
         const saves = getSavesList();
-        console.log('Available saves:', saves);
         if (saves.length === 0) {
             alert('No saves found');
             return;
@@ -364,7 +364,6 @@ export function initializeCanvasEventListeners(): void {
             const index = parseInt(choice) - 1;
             if (index >= 0 && index < saves.length) {
                 const saveData = saves[index];
-                console.log('Loading save data:', saveData);
                 state.setGridDimensions(saveData.rows, saveData.cols);
                 state.setGridData(saveData.gridData);
                 
@@ -373,13 +372,16 @@ export function initializeCanvasEventListeners(): void {
                 dom.colsInput.value = String(saveData.cols);
                 
                 state.setCurrentProjectName(saveData.name);
-                renderGrid(); // Just render, don't call createGrid
-                console.log('Load completed');
+                renderGrid();
                 alert('Project loaded successfully!');
             } else {
                 alert('Invalid selection');
             }
         }
+    });
+
+    dom.shareBtn.addEventListener('click', async () => {
+        await copyShareURL();
     });
 
     // Undo/Redo controls
@@ -617,7 +619,18 @@ export function initializeCanvasEventListeners(): void {
                     e.preventDefault();
                     redo();
                     break;
+                case 'n':
+                    e.preventDefault();
+                    dom.newBtn.click();
+                    break;
+                case 's':
+                    e.preventDefault();
+                    dom.saveBtn.click();
+                    break;
             }
+        } else if (e.key === 'Backspace' && (e.ctrlKey || e.metaKey)) {
+            e.preventDefault();
+            dom.deleteBtn.click();
         } else {
             switch (e.key.toLowerCase()) {
                 case 'd':

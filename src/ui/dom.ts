@@ -12,6 +12,7 @@ import saveSVG from '/save.svg';
 import loadSVG from '/load.svg';
 import deleteSVG from '/delete.svg';
 import eraseAllSVG from '/erase-all.svg';
+import shareSVG from '/share.svg';
 
 export const app: HTMLElement = document.getElementById('app')!;
 if (!app) throw new Error('Failed to find the app element');
@@ -38,18 +39,21 @@ export function setupUI(): void {
                     <span class="collapse-icon">▼</span>
                 </h3>
                 <div class="section-content" data-section="file">
-                    <div class="export-actions">
-                        <button id="new-btn" class="btn" aria-label="New Project" title="New Project">
+                    <div class="export-actions file-actions">
+                        <button id="new-btn" class="btn" aria-label="New Project" title="New Project (Ctrl+N)">
                             ➕
                         </button>
-                        <button id="save-btn" class="btn" aria-label="Save Project" title="Save Project">
+                        <button id="save-btn" class="btn" aria-label="Save Project" title="Save Project (Ctrl+S)">
                             <img src=${saveSVG} class="btn-icon"/>
                         </button>
                         <button id="load-btn" class="btn" aria-label="Load Project" title="Load Project">
                             <img src=${loadSVG} class="btn-icon"/>
                         </button>
-                        <button id="delete-btn" class="btn" aria-label="Delete Project" title="Delete Project">
+                        <button id="delete-btn" class="btn" aria-label="Delete Project" title="Delete Project (Ctrl+Backspace)">
                             <img src=${deleteSVG} class="btn-icon"/>
+                        </button>
+                        <button id="share-btn" class="btn" aria-label="Share Project" title="Share Project">
+                            <img src=${shareSVG} class="btn-icon"/>
                         </button>
                     </div>
                 </div>
@@ -217,6 +221,7 @@ export let newBtn: HTMLButtonElement;
 export let saveBtn: HTMLButtonElement;
 export let loadBtn: HTMLButtonElement;
 export let deleteBtn: HTMLButtonElement;
+export let shareBtn: HTMLButtonElement;
 
 export let drawBtn: HTMLButtonElement;
 export let eraseBtn: HTMLButtonElement;
@@ -261,6 +266,7 @@ export function initializeDOMElements(): void {
     saveBtn = document.getElementById('save-btn') as HTMLButtonElement;
     loadBtn = document.getElementById('load-btn') as HTMLButtonElement;
     deleteBtn = document.getElementById('delete-btn') as HTMLButtonElement;
+    shareBtn = document.getElementById('share-btn') as HTMLButtonElement;
 
     playBtn = document.getElementById('play-btn') as HTMLButtonElement;
     stopDosBtn = document.getElementById('stop-dos-btn') as HTMLButtonElement;

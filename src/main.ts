@@ -9,6 +9,7 @@ import { createColorPanel } from './ui/colorPalette';
 import { createGrid, initializeCanvas } from './grid/canvasGrid';
 import { loadGridDimensions } from './storage/persistence';
 import { initializeCanvasEventListeners, initializeProjectSystem } from './events/canvasListeners';
+import { loadFromURL } from './sharing/share';
 import { BACKGROUND_PALETTE, FOREGROUND_PALETTE } from './color';
 import * as state from './state/appState';
 import { rowsInput, colsInput } from './ui/dom';
@@ -16,7 +17,7 @@ import { rowsInput, colsInput } from './ui/dom';
 /**
  * @brief Initialize the PixTASM application
  */
-function initializeApplication(): void {
+async function initializeApplication(): Promise<void> {
     setupUI();
     initializeDOMElements();
 
@@ -28,26 +29,45 @@ function initializeApplication(): void {
     initializeCanvas(gridContainer);
     createGrid(state.getGridRows(), state.getGridCols());
 
-    createColorPanel(
-        bgColorPanel,
-        BACKGROUND_PALETTE,
-        state.getCurrentBgIndex(),
-        (selectedIndex) => state.setCurrentBgIndex(selectedIndex),
-        'bg'
-    );
+    // Check for shared project in URL
+    if (!(await loadFromURL())) {
+        // Only create color panels if no shared project was loaded
+        createColorPanel(
+            bgColorPanel,
+            BACKGROUND_PALETTE,
+            state.getCurrentBgIndex(),
+            (selectedIndex) => state.setCurrentBgIndex(selectedIndex),
+            'bg'
+        );
 
-    createColorPanel(
-        fgColorPanel,
-        FOREGROUND_PALETTE,
-        state.getCurrentFgIndex(),
-        (selectedIndex) => state.setCurrentFgIndex(selectedIndex),
-        'fg'
-    );
+        createColorPanel(
+            fgColorPanel,
+            FOREGROUND_PALETTE,
+            state.getCurrentFgIndex(),
+            (selectedIndex) => state.setCurrentFgIndex(selectedIndex),
+            'fg'
+        );
+    } else {
+        // Recreate color panels for shared project
+        createColorPanel(
+            bgColorPanel,
+            BACKGROUND_PALETTE,
+            state.getCurrentBgIndex(),
+            (selectedIndex) => state.setCurrentBgIndex(selectedIndex),
+            'bg'
+        );
+
+        createColorPanel(
+            fgColorPanel,
+            FOREGROUND_PALETTE,
+            state.getCurrentFgIndex(),
+            (selectedIndex) => state.setCurrentFgIndex(selectedIndex),
+            'fg'
+        );
+    }
 
     initializeCanvasEventListeners();
     initializeProjectSystem();
-
-    console.log('Application initialized.');
 }
 
 initializeApplication();

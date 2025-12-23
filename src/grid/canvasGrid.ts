@@ -95,7 +95,6 @@ export function initializeCanvas(container: HTMLElement): HTMLCanvasElement {
     
     startBlinkAnimation();
     
-    console.log('Canvas initialized and added to container');
     return canvas;
 }
 
@@ -212,7 +211,6 @@ function resizeCanvasToContainer(): void {
 
 function resizeCanvas(rows: number, cols: number): void {
     resizeCanvasToContainer();
-    console.log(`Canvas resized to container size (${rows}x${cols} cells, zoom: ${zoomLevel})`);
 }
 
 function renderCell(row: number, col: number, cellContent: CellContent | null): void {
@@ -450,7 +448,6 @@ export function createGrid(rows: number, cols: number): void {
     loadHistoryFromStorage(); // Load undo/redo history
     renderGrid();
     
-    console.log(`Canvas grid created with ${rows} rows and ${cols} columns.`);
     saveGridState(rows, cols, newGridData);
 }
 
