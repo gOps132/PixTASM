@@ -5,10 +5,19 @@ import { BACKGROUND_PALETTE } from '../color';
 export function createColorPanel(
     panel: HTMLDivElement,
     palette: readonly string[],
-    initialSelectedIndex: number,
-    onColorSelect: (index: number) => void
+    initialSelectedIndex: number | null,
+    onColorSelect: (index: number | null) => void,
+    panelType?: 'bg' | 'fg'
 ): void {
     panel.innerHTML = '';
+    
+    // Add appropriate class for layout
+    if (panelType === 'bg') {
+        panel.classList.add('bg-colors');
+    } else if (panelType === 'fg') {
+        panel.classList.add('fg-colors');
+    }
+    
     palette.forEach((color, index) => {
         const swatch = document.createElement('div');
         swatch.className = 'color-swatch';
@@ -20,12 +29,18 @@ export function createColorPanel(
         }
 
         swatch.addEventListener('click', () => {
-            onColorSelect(index);
-
+            const isCurrentlySelected = swatch.classList.contains('selected');
+            
             panel.querySelectorAll('.color-swatch').forEach(sw => sw.classList.remove('selected'));
-            swatch.classList.add('selected');
+            
+            if (isCurrentlySelected) {
+                onColorSelect(null); // Deselect
+            } else {
+                swatch.classList.add('selected');
+                onColorSelect(index);
+            }
 
-            if (palette === BACKGROUND_PALETTE) { // Check if it's the background palette
+            if (palette === BACKGROUND_PALETTE && index !== null) {
                  app?.style.setProperty('--change-color', BACKGROUND_PALETTE[index]);
             }
         });

@@ -1,4 +1,3 @@
-
 // src/events/listeners.ts
 
 import * as dom from '../ui/dom';
@@ -8,8 +7,9 @@ import { saveGridState } from '../storage/persistence';
 import { MIN_ROWS, MIN_COLS, MAX_ROWS, MAX_COLS } from '../constants';
 import { STORAGE_KEY_GRID_DATA, STORAGE_KEY_GRID_ROWS, STORAGE_KEY_GRID_COLS } from '../storage/constants';
 import { generateTASMCode } from '../tasm/generator';
+import { generateSpriteDB } from '../tasm/spritedb_generator';
 import { encodeCellData, decodeCellData } from '../color';
-import { getUnicodeCharFromCP437 } from '../mappings';
+// import { getUnicodeCharFromCP437 } from '../tasm/mappings';
 import type { CellContent } from '../types';
 
 
@@ -111,6 +111,17 @@ export function initializeEventListeners(): void {
         }).catch(err => {
             console.error('Failed to copy TASM code:', err);
             alert('Failed to copy TASM code. Check console for details.');
+        });
+    });
+
+    // New: Export DB button
+    dom.exportDbBtn.addEventListener('click', () => {
+        const dbText = generateSpriteDB(state.getGridData(), 'SPRITE');
+        navigator.clipboard.writeText(dbText).then(() => {
+            alert('DB sprite copied to clipboard!');
+        }).catch(err => {
+            console.error('Failed to copy DB sprite:', err);
+            alert('Failed to copy DB sprite. Check console for details.');
         });
     });
 

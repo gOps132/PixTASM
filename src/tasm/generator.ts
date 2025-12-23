@@ -1,16 +1,13 @@
-// src/tasm/generator.ts
+/**
+ * @file generator.ts
+ * @brief TASM assembly code generator for pixel art grid data
+ */
+
 import type { CellContent } from '../types';
 
-// TODO: Optimize the generated TASM code by grouping consecutive characters 
-// with the same attribute into strings for `int 21h, ah=09h` calls.
-// This will reduce the number of instructions and improve performance.
-// Note: '$' characters cannot be part of these strings as they terminate the 
-// DOS string.
-
-// TODO: Split the generation logic into smaller, testable functions for 
-// better maintainability.
-
-
+/**
+ * @brief TASM macro definitions and program structure
+ */
 let macros: string = `
 putc MACRO char
     mov ah, 02h
@@ -43,7 +40,8 @@ ENDM
 .code
 `;
     
-    const startCode: string = macros + `
+/** Program initialization code */
+const startCode: string = macros + `
 .stack 100h
 start :
     mov ax, @data
@@ -53,15 +51,26 @@ start :
     mov ah, 00h
     mov al, 03h ; 80x25 color text mode
     int 10h\n
-`; // EVERYTHING COMES AFTER HERE
+`;
 
-    const endCode: string = `
+/** Program termination code */
+const endCode: string = `
     mov ah, 4Ch      ; DOS exit function
     mov al, 0        ; Return code 0
     int 21h          ; Call DOS interrupt
 end start ; end program
 `;
 
+/**
+ * @brief Generates TASM assembly code from grid data
+ * @param gridData 2D array of cell content data
+ * @return Complete TASM assembly program as string
+ * 
+ * The generator optimizes output by:
+ * - Grouping consecutive characters with same attributes into strings
+ * - Using renderc macro for blocks and special characters
+ * - Handling '$' characters separately (DOS string terminators)
+ */
 export function generateTASMCode(gridData: (CellContent | null)[][]): string {
     let currentMiddleCode = '';
     let string_data_declarations = '';
@@ -80,41 +89,37 @@ export function generateTASMCode(gridData: (CellContent | null)[][]): string {
             let segmentStartCol = col;
             let currentAttribute = cell.attribute !== null ? cell.attribute : 0x07;
 
-            // --- Attempt to form a 'text string' sequence for DOS `int 21h, ah=09h` ---
-            // A text string consists of consecutive cells with characters and the same attribute,
-            // and importantly, no '$' characters which act as terminators for `int 21h, ah=09h`.
-            if (cell.charCode !== null && cell.charCode !== 36) { // Don't start a string if the character is '$'
+            if (cell.attribute === null && (cell.charCode === null || cell.charCode === undefined)) {
+                col++;
+                continue;
+            }
+
+            if (cell.charCode !== null && cell.charCode !== 36) {
                 let textSegmentChars: number[] = [];
                 let currentSegmentCol = col;
 
-                // Accumulate characters for the string segment
                 while (currentSegmentCol < gridData[row].length) {
                     const nextCell = gridData[row][currentSegmentCol];
                     const nextCharCode = nextCell?.charCode;
                     const nextAttribute = nextCell && nextCell.attribute !== null ? nextCell.attribute : 0x07;
 
-                    // Conditions to continue a text string:
-                    // 1. A character exists (`nextCharCode !== null`).
-                    // 2. The attribute matches the current segment's attribute (`nextAttribute === currentAttribute`).
-                    // 3. The character is not '$' (ASCII 36), which would terminate the DOS string.
                     if (nextCharCode !== null && nextAttribute === currentAttribute && nextCharCode !== 36) {
                         if (nextCharCode !== undefined) {
                             textSegmentChars.push(nextCharCode);
                         }
                         currentSegmentCol++;
                     } else {
-                        break; // Condition not met, string segment ends
+                        break;
                     }
                 }
 
                 if (textSegmentChars.length > 0) {
-                    // We successfully found a text string segment
                     const label = `txt_${stringCounter++}_R${row}_C${segmentStartCol}`;
                     let stringLiteral = '';
                     for (const charCode of textSegmentChars) {
                         const char = String.fromCharCode(charCode);
                         if (char === '"') {
-                            stringLiteral += '""'; // Escape double quotes for TASM string literals
+                            stringLiteral += '""';
                         } else {
                             stringLiteral += char;
                         }
@@ -122,18 +127,16 @@ export function generateTASMCode(gridData: (CellContent | null)[][]): string {
 
                     string_data_declarations += `\t${label} db "${stringLiteral}",'$'\n`;
 
-                    // Generate the TASM instructions to display this string
                     currentMiddleCode += `\n\tsetcursor ${row}, ${segmentStartCol}\n`;
-                    if (currentAttribute !== 0x07) { // Only set color if it's not the default white on black
-                        // currentMiddleCode += `\tcolorz ${currentAttribute.toString(16).padStart(2, '0')}h, ${textSegmentChars.length}\n`;
+                    if (currentAttribute !== 0x07) {
                         currentMiddleCode += `\tcolorz ${currentAttribute.toString(10)}, ${textSegmentChars.length}\n`;
                     }
                     currentMiddleCode += `\tmov ah, 09h\n`;
                     currentMiddleCode += `\tmov dx, offset ${label}\n`;
                     currentMiddleCode += `\tint 21h\n`;
 
-                    col = currentSegmentCol; // Move 'col' past the processed string segment
-                    continue; // Continue to the next part of the row
+                    col = currentSegmentCol;
+                    continue;
                 }
             }
 

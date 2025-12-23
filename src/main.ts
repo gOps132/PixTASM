@@ -1,47 +1,53 @@
-// src/main.ts
+/**
+ * @file main.ts
+ * @brief Application entry point and initialization
+ */
 
 import './style.css';
-import { app, setupUI, initializeDOMElements, gridContainer, bgColorPanel, fgColorPanel } from './ui/dom';
+import { setupUI, initializeDOMElements, gridContainer, bgColorPanel, fgColorPanel } from './ui/dom';
 import { createColorPanel } from './ui/colorPalette';
-import { createGrid } from './grid/grid';
+import { createGrid, initializeCanvas } from './grid/canvasGrid';
 import { loadGridDimensions } from './storage/persistence';
-import { initializeEventListeners } from './events/listeners';
+import { initializeCanvasEventListeners, initializeProjectSystem } from './events/canvasListeners';
 import { BACKGROUND_PALETTE, FOREGROUND_PALETTE } from './color';
 import * as state from './state/appState';
-import { rowsInput, colsInput } from './ui/dom'; // Import input elements
+import { rowsInput, colsInput } from './ui/dom';
 
-// 1. Create the HTML structure
-setupUI();
+/**
+ * @brief Initialize the PixTASM application
+ */
+function initializeApplication(): void {
+    setupUI();
+    initializeDOMElements();
 
-// 2. NOW that the HTML exists, find and assign the element variables
-initializeDOMElements();
+    const { rows, cols } = loadGridDimensions();
+    state.setGridDimensions(rows, cols);
+    rowsInput.value = String(rows);
+    colsInput.value = String(cols);
 
-// 3. Load initial state and update UI inputs
-const { rows, cols } = loadGridDimensions();
-state.setGridDimensions(rows, cols);
-rowsInput.value = String(rows);
-colsInput.value = String(cols);
+    initializeCanvas(gridContainer);
+    createGrid(state.getGridRows(), state.getGridCols());
 
-// 4. Create the grid based on the initial state
-createGrid(state.getGridRows(), state.getGridCols());
-app.appendChild(gridContainer);
+    createColorPanel(
+        bgColorPanel,
+        BACKGROUND_PALETTE,
+        state.getCurrentBgIndex(),
+        (selectedIndex) => state.setCurrentBgIndex(selectedIndex),
+        'bg'
+    );
 
-// 5. Create UI components like color palettes
-createColorPanel(
-    bgColorPanel, // This variable is now correctly assigned and not null
-    BACKGROUND_PALETTE,
-    state.getCurrentBgIndex(),
-    (selectedIndex) => state.setCurrentBgIndex(selectedIndex)
-);
+    createColorPanel(
+        fgColorPanel,
+        FOREGROUND_PALETTE,
+        state.getCurrentFgIndex(),
+        (selectedIndex) => state.setCurrentFgIndex(selectedIndex),
+        'fg'
+    );
 
-createColorPanel(
-    fgColorPanel, // This variable is also correct now
-    FOREGROUND_PALETTE,
-    state.getCurrentFgIndex(),
-    (selectedIndex) => state.setCurrentFgIndex(selectedIndex)
-);
+    initializeCanvasEventListeners();
+    initializeProjectSystem();
 
-// 6. Attach all event listeners to make the app interactive
-initializeEventListeners();
+    console.log('Application initialized.');
+}
 
-console.log('Application initialized.');
+initializeApplication();

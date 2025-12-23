@@ -4,7 +4,7 @@ import * as state from '../state/appState';
 import { saveGridState, loadGridData } from '../storage/persistence';
 import { gridContainer } from '../ui/dom';
 import { decodeCellData, encodeCellData, BACKGROUND_PALETTE, FOREGROUND_PALETTE } from '../color';
-import { getUnicodeCharFromCP437 } from '../mappings';
+import { getUnicodeCharFromCP437 } from '../tasm/mappings';
 import type { CellContent } from '../types';
 import { STORAGE_KEY_GRID_DATA } from '../storage/constants';
 

@@ -6,10 +6,15 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc && vite build",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "docs": "doxygen Doxyfile",
+    "docs:serve": "cd docs/html && python -m http.server 8080"
   },
   "devDependencies": {
     "typescript": "~5.8.3",
     "vite": "^7.1.2"
+  },
+  "dependencies": {
+    "jszip": "^3.10.1"
   }
 }

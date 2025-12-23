@@ -1,21 +1,22 @@
 // src/storage/persistence.ts
-import { STORAGE_KEY_GRID_DATA, STORAGE_KEY_GRID_ROWS, STORAGE_KEY_GRID_COLS } from './constants';
+import { STORAGE_KEY_AUTOSAVE_DATA, STORAGE_KEY_AUTOSAVE_ROWS, STORAGE_KEY_AUTOSAVE_COLS } from './constants';
 
 import type { CellContent } from '../types';
 
-export function saveGridState(rows: number, cols: number, data: (CellContent | null)[][]): void {
+// Autosave functions - separate from project saves
+export function saveAutosaveState(rows: number, cols: number, data: (CellContent | null)[][]): void {
     try {
-        localStorage.setItem(STORAGE_KEY_GRID_ROWS, String(rows));
-        localStorage.setItem(STORAGE_KEY_GRID_COLS, String(cols));
-        localStorage.setItem(STORAGE_KEY_GRID_DATA, JSON.stringify(data));
+        localStorage.setItem(STORAGE_KEY_AUTOSAVE_ROWS, String(rows));
+        localStorage.setItem(STORAGE_KEY_AUTOSAVE_COLS, String(cols));
+        localStorage.setItem(STORAGE_KEY_AUTOSAVE_DATA, JSON.stringify(data));
     } catch (error) {
-        console.error('Failed to save grid state to localStorage:', error);
+        console.error('Failed to save autosave state to localStorage:', error);
     }
 }
 
-export function loadGridDimensions(): { rows: number, cols: number } {
-    const savedRows = localStorage.getItem(STORAGE_KEY_GRID_ROWS);
-    const savedCols = localStorage.getItem(STORAGE_KEY_GRID_COLS);
+export function loadAutosaveDimensions(): { rows: number, cols: number } {
+    const savedRows = localStorage.getItem(STORAGE_KEY_AUTOSAVE_ROWS);
+    const savedCols = localStorage.getItem(STORAGE_KEY_AUTOSAVE_COLS);
 
     const rows = savedRows ? parseInt(savedRows, 10) : 10;
     const cols = savedCols ? parseInt(savedCols, 10) : 10;
@@ -23,20 +24,27 @@ export function loadGridDimensions(): { rows: number, cols: number } {
     return { rows, cols };
 }
 
-export function loadGridData(rows: number, cols: number): (CellContent | null)[][] | null {
-    const savedDataJSON = localStorage.getItem(STORAGE_KEY_GRID_DATA);
+export function loadAutosaveData(): (CellContent | null)[][] | null {
+    const savedDataJSON = localStorage.getItem(STORAGE_KEY_AUTOSAVE_DATA);
     if (!savedDataJSON) return null;
 
     try {
-        const savedData = JSON.parse(savedDataJSON);
-        if (savedData?.length === rows && savedData[0]?.length === cols) {
-            return savedData;
-        }
-        // Data dimensions mismatch, discard it
-        localStorage.removeItem(STORAGE_KEY_GRID_DATA);
-        return null;
+        return JSON.parse(savedDataJSON);
     } catch (e) {
-        console.error("Failed to parse saved grid data.", e);
+        console.error("Failed to parse autosave data.", e);
         return null;
     }
+}
+
+// Legacy functions for backward compatibility - now just aliases
+export function saveGridState(rows: number, cols: number, data: (CellContent | null)[][]): void {
+    saveAutosaveState(rows, cols, data);
+}
+
+export function loadGridDimensions(): { rows: number, cols: number } {
+    return loadAutosaveDimensions();
+}
+
+export function loadGridData(): (CellContent | null)[][] | null {
+    return loadAutosaveData();
 }
