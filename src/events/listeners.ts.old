@@ -1,0 +1,264 @@
+// src/events/listeners.ts
+
+import * as dom from '../ui/dom';
+import * as state from '../state/appState';
+import { createGrid, renderCell, focusCell, applyDrawing } from '../grid/grid';
+import { saveGridState } from '../storage/persistence';
+import { MIN_ROWS, MIN_COLS, MAX_ROWS, MAX_COLS } from '../constants';
+import { STORAGE_KEY_GRID_DATA, STORAGE_KEY_GRID_ROWS, STORAGE_KEY_GRID_COLS } from '../storage/constants';
+import { generateTASMCode } from '../tasm/generator';
+import { generateSpriteDB } from '../tasm/spritedb_generator';
+import { encodeCellData, decodeCellData } from '../color';
+// import { getUnicodeCharFromCP437 } from '../tasm/mappings';
+import type { CellContent } from '../types';
+
+
+/**
+ * Clears any visual state related to text mode.
+ */
+function exitTextModeVisuals(): void {
+    const activeCell = state.getActiveCell();
+    if (activeCell) {
+        activeCell.classList.remove('active');
+        const row = parseInt(activeCell.dataset.row!);
+        const col = parseInt(activeCell.dataset.col!);
+        renderCell(activeCell, state.getGridData()[row][col]);
+        state.setActiveCell(null);
+    }
+}
+
+export function initializeEventListeners(): void {
+    
+    dom.resizeBtn.addEventListener('click', () => {
+        const newRows = parseInt(dom.rowsInput.value, 10);
+        const newCols = parseInt(dom.colsInput.value, 10);
+
+        if (isNaN(newRows) || isNaN(newCols) || newRows < MIN_ROWS || newCols < MIN_COLS || newCols > MAX_COLS || newRows > MAX_ROWS) {
+            alert(`Please set grid dimensions between (${MIN_ROWS}x${MIN_COLS}) and (${MAX_ROWS}x${MAX_COLS}) cells.`);
+            return;
+        }
+
+        localStorage.setItem(STORAGE_KEY_GRID_ROWS, String(newRows));
+        localStorage.setItem(STORAGE_KEY_GRID_COLS, String(newCols));
+        localStorage.removeItem(STORAGE_KEY_GRID_DATA);
+
+        createGrid(newRows, newCols);
+    });
+
+    dom.drawBtn.addEventListener('click', () => {
+        if (state.isDrawing()) {
+            state.setToolState('none');
+            dom.drawBtn.classList.remove('active');
+        } else {
+            state.setToolState('draw');
+            dom.drawBtn.classList.add('active');
+            dom.eraseBtn.classList.remove('active');
+            dom.textBtn.classList.remove('active');
+            exitTextModeVisuals();
+        }
+    });
+
+    dom.eraseBtn.addEventListener('click', () => {
+        if (state.isErasing()) {
+            state.setToolState('none');
+            dom.eraseBtn.classList.remove('active');
+        } else {
+            state.setToolState('erase');
+            dom.eraseBtn.classList.add('active');
+            dom.drawBtn.classList.remove('active');
+            dom.textBtn.classList.remove('active');
+            exitTextModeVisuals();
+        }
+    });
+
+    dom.textBtn.addEventListener('click', () => {
+        if (state.isTextMode()) {
+            state.setToolState('none');
+            dom.textBtn.classList.remove('active');
+            exitTextModeVisuals();
+        } else {
+            state.setToolState('text');
+            dom.textBtn.classList.add('active');
+            dom.drawBtn.classList.remove('active');
+            dom.eraseBtn.classList.remove('active');
+            
+            let activeCell = state.getActiveCell();
+            if (!activeCell) {
+                // Default to the top-left cell if no cell is active
+                activeCell = state.getCellElements()[0][0];
+            }
+            focusCell(parseInt(activeCell.dataset.row!), parseInt(activeCell.dataset.col!));
+        }
+    });
+
+    dom.blinkBtn.addEventListener('click', () => {
+        state.setIsBlinkEnabled(!state.isBlinkEnabled());
+        dom.blinkBtn.classList.toggle('active');
+    });
+
+    dom.renderBtn.addEventListener('click', () => {
+        if (state.isTextMode() && state.getActiveCell()) {
+            // Ensure the visual state of the active cell is updated before copying
+            const activeCell = state.getActiveCell()!;
+            const row = parseInt(activeCell.dataset.row!);
+            const col = parseInt(activeCell.dataset.col!);
+            renderCell(activeCell, state.getGridData()[row][col]); 
+        }
+
+        const tasmCode = generateTASMCode(state.getGridData());
+        navigator.clipboard.writeText(tasmCode).then(() => {
+            alert('TASM code copied to clipboard!');
+        }).catch(err => {
+            console.error('Failed to copy TASM code:', err);
+            alert('Failed to copy TASM code. Check console for details.');
+        });
+    });
+
+    // New: Export DB button
+    dom.exportDbBtn.addEventListener('click', () => {
+        const dbText = generateSpriteDB(state.getGridData(), 'SPRITE');
+        navigator.clipboard.writeText(dbText).then(() => {
+            alert('DB sprite copied to clipboard!');
+        }).catch(err => {
+            console.error('Failed to copy DB sprite:', err);
+            alert('Failed to copy DB sprite. Check console for details.');
+        });
+    });
+
+
+    // --- Mouse and Keyboard Event Listeners ---
+
+    dom.gridContainer.addEventListener('mousedown', (e) => {
+        let cell = (e.target as HTMLElement).closest('.cell') as HTMLDivElement;
+        if (!cell) return;
+
+        e.preventDefault();
+        state.setIsMouseDown(true);
+
+        if (state.isTextMode()) {
+            focusCell(parseInt(cell.dataset.row!), parseInt(cell.dataset.col!));
+            state.setIsMouseDown(false); // Prevent dragging in text mode
+            return;
+        }
+
+        if (state.isDrawing() || state.isErasing() || (state.isBlinkEnabled() && !state.isDrawing())) {
+            applyDrawing(cell);
+        }
+    });
+
+    dom.gridContainer.addEventListener('mousemove', (e) => {
+        if (!state.isMouseDown()) return;
+
+        let cell = (e.target as HTMLElement).closest('.cell') as HTMLDivElement;
+        if (!cell) return;
+        
+        e.preventDefault();
+
+        if (state.isDrawing() || state.isErasing() || (state.isBlinkEnabled() && !state.isDrawing())) {
+            applyDrawing(cell);
+        }
+    });
+
+    window.addEventListener('mouseup', () => {
+        state.setIsMouseDown(false);
+    });
+
+    document.addEventListener('keydown', (e) => {
+        const activeCell = state.getActiveCell();
+        if (!state.isTextMode() || !activeCell) return;
+
+        e.preventDefault();
+
+        const currentRow = parseInt(activeCell.dataset.row!);
+        const currentCol = parseInt(activeCell.dataset.col!);
+        let nextRow = currentRow;
+        let nextCol = currentCol;
+        let charTyped = false;
+        
+        const gridData = state.getGridData(); // Get a reference to the data
+
+        switch (e.key) {
+            case 'Backspace': {
+                let cellContent = gridData[currentRow][currentCol];
+                if (cellContent) {
+                    cellContent.charCode = null;
+                    if (cellContent.attribute === null) gridData[currentRow][currentCol] = null;
+                }
+                renderCell(activeCell, gridData[currentRow][currentCol]);
+                nextCol--;
+                break;
+            }
+            case 'Delete': {
+                let cellContent = gridData[currentRow][currentCol];
+                if (cellContent) {
+                    cellContent.charCode = null;
+                    if (cellContent.attribute === null) gridData[currentRow][currentCol] = null;
+                }
+                renderCell(activeCell, gridData[currentRow][currentCol]);
+                break;
+            }
+            // Arrow navigation
+            case 'ArrowLeft': nextCol--; break;
+            case 'ArrowRight': nextCol++; break;
+            case 'ArrowUp': nextRow--; break;
+            case 'ArrowDown': nextRow++; break;
+            case 'Enter': nextRow++; nextCol = 0; break;
+            case 'Home': nextCol = 0; break;
+            case 'End': nextCol = state.getGridCols() - 1; break;
+
+            default:
+                if (e.key.length === 1 && !e.ctrlKey && !e.altKey && !e.metaKey) {
+                    const charCode = e.key.charCodeAt(0);
+
+                    if (charCode >= 0 && charCode <= 255) {
+                        let cellContent: CellContent = gridData[currentRow][currentCol] || { charCode: null, attribute: null };
+                        
+                        // Preserve existing bg/blink settings, but apply new fg color
+                        const existingAttr = cellContent.attribute !== null ? decodeCellData(cellContent.attribute) : { bgIndex: state.getCurrentBgIndex(), isBlinking: state.isBlinkEnabled() };
+                        cellContent.attribute = encodeCellData({
+                            // TODO: some other behavior might be intended here because 
+                            // of getCurrentBgIndex, existing attributes might be
+                            // overwritten unintentionally.
+                            bgIndex: state.getCurrentBgIndex(),
+                            fgIndex: state.getCurrentFgIndex(),
+                            isBlinking: existingAttr.isBlinking
+                        });
+
+                        cellContent.charCode = charCode;
+                        gridData[currentRow][currentCol] = cellContent;
+
+                        renderCell(activeCell, cellContent);
+                        charTyped = true;
+                    }
+                }
+                break;
+        }
+
+        // Save state after any keydown that modifies data
+        if (['Backspace', 'Delete'].includes(e.key) || charTyped) {
+            saveGridState(state.getGridRows(), state.getGridCols(), gridData);
+        }
+
+        if (charTyped) {
+            nextCol++;
+        }
+
+        // Handle grid boundary and wrap-around
+        if (nextCol < 0) {
+            nextCol = state.getGridCols() - 1;
+            nextRow--;
+        } else if (nextCol >= state.getGridCols()) {
+            nextCol = 0;
+            nextRow++;
+        }
+        if (nextRow < 0) {
+            nextRow = state.getGridRows() - 1;
+        } else if (nextRow >= state.getGridRows()) {
+            nextRow = 0;
+        }
+
+        if (nextRow !== currentRow || nextCol !== currentCol) {
+            focusCell(nextRow, nextCol);
+        }
+    });
+}
