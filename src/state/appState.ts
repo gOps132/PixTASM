@@ -9,7 +9,10 @@ let _isErasing: boolean = false;
 let _isDrawing: boolean = false;
 let _isTextMode: boolean = false;
 let _isFilling: boolean = false;
+let _isSelecting: boolean = false;
 let _isMouseDown: boolean = false;
+let _selectionStart: { row: number; col: number } | null = null;
+let _selectionEnd: { row: number; col: number } | null = null;
 let _currentBgIndex: number | null = 0;
 let _currentFgIndex: number | null = 7;
 let _isBlinkEnabled: boolean = false;
@@ -25,7 +28,10 @@ export const isErasing = (): boolean => _isErasing;
 export const isDrawing = (): boolean => _isDrawing;
 export const isTextMode = (): boolean => _isTextMode;
 export const isFilling = (): boolean => _isFilling;
+export const isSelecting = (): boolean => _isSelecting;
 export const isMouseDown = (): boolean => _isMouseDown;
+export const getSelectionStart = (): { row: number; col: number } | null => _selectionStart;
+export const getSelectionEnd = (): { row: number; col: number } | null => _selectionEnd;
 export const getCurrentBgIndex = (): number | null => _currentBgIndex;
 export const getCurrentFgIndex = (): number | null => _currentFgIndex;
 export const isBlinkEnabled = (): boolean => _isBlinkEnabled;
@@ -82,9 +88,19 @@ function updateProjectNameDisplay(): void {
 /**
  * A higher-level setter to manage mutually exclusive tool states.
  */
-export function setToolState(tool: 'draw' | 'erase' | 'text' | 'fill' | 'none'): void {
+export function setToolState(tool: 'draw' | 'erase' | 'text' | 'fill' | 'select' | 'none'): void {
     _isDrawing = tool === 'draw';
     _isErasing = tool === 'erase';
     _isTextMode = tool === 'text';
     _isFilling = tool === 'fill';
+    _isSelecting = tool === 'select';
+}
+
+export function setSelection(start: { row: number; col: number } | null, end: { row: number; col: number } | null): void {
+    _selectionStart = start;
+    _selectionEnd = end;
+}
+
+export function hasSelection(): boolean {
+    return _selectionStart !== null && _selectionEnd !== null;
 }

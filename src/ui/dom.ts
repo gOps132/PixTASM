@@ -13,6 +13,7 @@ import loadSVG from '/load.svg';
 import deleteSVG from '/delete.svg';
 import eraseAllSVG from '/erase-all.svg';
 import shareSVG from '/share.svg';
+import selectSVG from '/select.svg';
 
 export const app: HTMLElement = document.getElementById('app')!;
 if (!app) throw new Error('Failed to find the app element');
@@ -99,6 +100,9 @@ export function setupUI(): void {
                         </button>
                         <button id="fill-btn" class="btn" aria-label="Fill" title="Fill (F)">
                             <img src=${fillSVG} class="btn-icon"/>
+                        </button>
+                        <button id="select-btn" class="btn" aria-label="Select" title="Select (S)">
+                            <img src=${selectSVG} class="btn-icon"/>
                         </button>
                         <button id="clear-btn" class="btn" aria-label="Clear All" title="Clear All">
                             <img src=${eraseAllSVG} class="btn-icon"/>
@@ -235,6 +239,7 @@ export let stopDosBtn: HTMLButtonElement;
 
 export let toggleSidebarBtn: HTMLButtonElement;
 export let fillBtn: HTMLButtonElement;
+export let selectBtn: HTMLButtonElement;
 export let panBtn: HTMLButtonElement;
 export let panResetBtn: HTMLButtonElement;
 export let clearBtn: HTMLButtonElement;
@@ -273,6 +278,7 @@ export function initializeDOMElements(): void {
 
     toggleSidebarBtn = document.getElementById('toggle-sidebar-btn') as HTMLButtonElement;
     fillBtn = document.getElementById('fill-btn') as HTMLButtonElement;
+    selectBtn = document.getElementById('select-btn') as HTMLButtonElement;
     panBtn = document.getElementById('pan-btn') as HTMLButtonElement;
     panResetBtn = document.getElementById('pan-reset-btn') as HTMLButtonElement;
     clearBtn = document.getElementById('clear-btn') as HTMLButtonElement;

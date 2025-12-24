@@ -45,6 +45,12 @@ let resizeStartCols: number = 0;
 let blinkState: boolean = true;
 /** Blink animation interval ID */
 let blinkInterval: number | null = null;
+/** Selection start coordinates */
+let selectionStart: { row: number; col: number } | null = null;
+/** Selection end coordinates */
+let selectionEnd: { row: number; col: number } | null = null;
+/** Whether currently making a selection */
+let isSelecting: boolean = false;
 
 /** Undo history stack */
 let undoStack: (CellContent | null)[][][] = [];
@@ -260,6 +266,15 @@ function renderCell(row: number, col: number, cellContent: CellContent | null): 
         ctx.strokeStyle = '#fff';
         ctx.lineWidth = Math.max(1, 2 * zoomLevel);
         ctx.strokeRect(x + 1, y + 1, scaledCellWidth - 2, scaledCellHeight - 2);
+    }
+    
+    // Draw selection overlay
+    if (isInSelection(row, col)) {
+        ctx.fillStyle = 'rgba(0, 150, 255, 0.3)';
+        ctx.fillRect(x, y, scaledCellWidth, scaledCellHeight);
+        ctx.strokeStyle = '#0096ff';
+        ctx.lineWidth = Math.max(1, 1 * zoomLevel);
+        ctx.strokeRect(x, y, scaledCellWidth, scaledCellHeight);
     }
     
     // Draw grid lines
@@ -626,6 +641,157 @@ function resizeGrid(newRows: number, newCols: number): void {
 
 export function isResizeMode(): boolean {
     return isResizing;
+}
+
+export function startSelection(row: number, col: number): void {
+    selectionStart = { row, col };
+    selectionEnd = { row, col };
+    isSelecting = true;
+    renderGrid();
+}
+
+export function updateSelection(row: number, col: number): void {
+    if (isSelecting && selectionStart) {
+        selectionEnd = { row, col };
+        renderGrid();
+    }
+}
+
+export function endSelection(): void {
+    isSelecting = false;
+    if (selectionStart && selectionEnd) {
+        state.setSelection(selectionStart, selectionEnd);
+    }
+}
+
+export function clearSelection(): void {
+    selectionStart = null;
+    selectionEnd = null;
+    isSelecting = false;
+    state.setSelection(null, null);
+    renderGrid();
+}
+
+function isInSelection(row: number, col: number): boolean {
+    if (!selectionStart || !selectionEnd) return false;
+    
+    const minRow = Math.min(selectionStart.row, selectionEnd.row);
+    const maxRow = Math.max(selectionStart.row, selectionEnd.row);
+    const minCol = Math.min(selectionStart.col, selectionEnd.col);
+    const maxCol = Math.max(selectionStart.col, selectionEnd.col);
+    
+    return row >= minRow && row <= maxRow && col >= minCol && col <= maxCol;
+}
+
+export function applyToSelection(action: 'draw' | 'erase' | 'blink'): void {
+    if (!state.hasSelection()) return;
+    
+    const start = state.getSelectionStart()!;
+    const end = state.getSelectionEnd()!;
+    const gridData = state.getGridData();
+    
+    const minRow = Math.min(start.row, end.row);
+    const maxRow = Math.max(start.row, end.row);
+    const minCol = Math.min(start.col, end.col);
+    const maxCol = Math.max(start.col, end.col);
+    
+    saveToHistory();
+    
+    for (let row = minRow; row <= maxRow; row++) {
+        for (let col = minCol; col <= maxCol; col++) {
+            let currentCellContent: CellContent = gridData[row][col] || { charCode: null, attribute: null };
+            
+            if (action === 'erase') {
+                gridData[row][col] = null;
+            } else if (action === 'draw') {
+                const bgIndex = state.getCurrentBgIndex();
+                const fgIndex = state.getCurrentFgIndex();
+                
+                if (bgIndex !== null || fgIndex !== null) {
+                    currentCellContent.attribute = encodeCellData({
+                        bgIndex: bgIndex ?? 0,
+                        fgIndex: fgIndex ?? 7,
+                        isBlinking: state.isBlinkEnabled()
+                    });
+                    gridData[row][col] = currentCellContent;
+                }
+            } else if (action === 'blink' && currentCellContent.attribute !== null) {
+                const decoded = decodeCellData(currentCellContent.attribute);
+                currentCellContent.attribute = encodeCellData({
+                    bgIndex: decoded.bgIndex,
+                    fgIndex: decoded.fgIndex,
+                    isBlinking: !decoded.isBlinking
+                });
+                gridData[row][col] = currentCellContent;
+            }
+        }
+    }
+    
+    renderGrid();
+    saveGridState(state.getGridRows(), state.getGridCols(), gridData);
+}
+
+export function typeInSelection(text: string): void {
+    if (!state.hasSelection()) return;
+    
+    const start = state.getSelectionStart()!;
+    const end = state.getSelectionEnd()!;
+    const gridData = state.getGridData();
+    
+    const minRow = Math.min(start.row, end.row);
+    const maxRow = Math.max(start.row, end.row);
+    const minCol = Math.min(start.col, end.col);
+    const maxCol = Math.max(start.col, end.col);
+    
+    const selectionWidth = maxCol - minCol + 1;
+    const selectionHeight = maxRow - minRow + 1;
+    
+    saveToHistory();
+    
+    // Get current cursor position within selection (start from active cell if in selection)
+    const activeCell = getActiveCell();
+    let currentRow = minRow;
+    let currentCol = minCol;
+    
+    if (activeCell && isInSelection(activeCell.row, activeCell.col)) {
+        currentRow = activeCell.row;
+        currentCol = activeCell.col;
+    }
+    
+    for (let i = 0; i < text.length; i++) {
+        const char = text[i];
+        const charCode = char.charCodeAt(0);
+        
+        if (charCode >= 0 && charCode <= 255) {
+            let cellContent: CellContent = gridData[currentRow][currentCol] || { charCode: null, attribute: null };
+            
+            cellContent.attribute = encodeCellData({
+                bgIndex: state.getCurrentBgIndex() ?? 0,
+                fgIndex: state.getCurrentFgIndex() ?? 7,
+                isBlinking: state.isBlinkEnabled()
+            });
+            cellContent.charCode = charCode;
+            gridData[currentRow][currentCol] = cellContent;
+            
+            // Move to next position with wrapping
+            currentCol++;
+            if (currentCol > maxCol) {
+                currentCol = minCol;
+                currentRow++;
+                if (currentRow > maxRow) {
+                    break; // Stop if we've filled the entire selection
+                }
+            }
+        }
+    }
+    
+    // Update active cell position
+    if (currentRow <= maxRow) {
+        focusCell(currentRow, currentCol);
+    }
+    
+    renderGrid();
+    saveGridState(state.getGridRows(), state.getGridCols(), gridData);
 }
 
 export function exitTextModeVisuals(): void {

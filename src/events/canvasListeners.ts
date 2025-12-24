@@ -2,7 +2,7 @@
 
 import * as dom from '../ui/dom';
 import * as state from '../state/appState';
-import { createGrid, applyDrawing, focusCell, getCellFromCoordinates, getActiveCell, exitTextModeVisuals, getCanvas, renderGrid, zoomIn, zoomOut, resetZoom, getZoomLevel, setPanMode, startPan, updatePan, endPan, isPanMode, resetPan, floodFill, undo, redo, canUndo, canRedo, loadHistoryFromStorage, setUpdateButtonsCallback, saveToHistory, getResizeHandle, startResize, updateResize, endResize, isResizeMode } from '../grid/canvasGrid';
+import { createGrid, applyDrawing, focusCell, getCellFromCoordinates, getActiveCell, exitTextModeVisuals, getCanvas, renderGrid, zoomIn, zoomOut, resetZoom, getZoomLevel, setPanMode, startPan, updatePan, endPan, isPanMode, resetPan, floodFill, undo, redo, canUndo, canRedo, loadHistoryFromStorage, setUpdateButtonsCallback, saveToHistory, getResizeHandle, startResize, updateResize, endResize, isResizeMode, startSelection, updateSelection, endSelection, clearSelection, applyToSelection, typeInSelection } from '../grid/canvasGrid';
 import { saveGridState } from '../storage/persistence';
 import { MIN_ROWS, MIN_COLS, MAX_ROWS, MAX_COLS } from '../constants';
 import { STORAGE_KEY_AUTOSAVE_ROWS, STORAGE_KEY_AUTOSAVE_COLS } from '../storage/constants';
@@ -68,6 +68,11 @@ export function initializeCanvasEventListeners(): void {
             state.setToolState('none');
             dom.eraseBtn.classList.remove('active');
         } else {
+            // If there's a selection, apply erase to it
+            if (state.hasSelection()) {
+                applyToSelection('erase');
+                return;
+            }
             state.setToolState('erase');
             dom.eraseBtn.classList.add('active');
             dom.drawBtn.classList.remove('active');
@@ -93,6 +98,11 @@ export function initializeCanvasEventListeners(): void {
     });
 
     dom.blinkBtn.addEventListener('click', () => {
+        // If there's a selection, apply blink toggle to it
+        if (state.hasSelection()) {
+            applyToSelection('blink');
+            return;
+        }
         state.setIsBlinkEnabled(!state.isBlinkEnabled());
         dom.blinkBtn.classList.toggle('active');
     });
@@ -102,11 +112,35 @@ export function initializeCanvasEventListeners(): void {
             state.setToolState('none');
             dom.fillBtn.classList.remove('active');
         } else {
+            // If there's a selection, apply fill to it
+            if (state.hasSelection()) {
+                applyToSelection('draw');
+                return;
+            }
             state.setToolState('fill');
             dom.fillBtn.classList.add('active');
             dom.drawBtn.classList.remove('active');
             dom.eraseBtn.classList.remove('active');
             dom.textBtn.classList.remove('active');
+            dom.selectBtn.classList.remove('active');
+            dom.panBtn.classList.remove('active');
+            setPanMode(false);
+            exitTextModeVisuals();
+        }
+    });
+
+    dom.selectBtn.addEventListener('click', () => {
+        if (state.isSelecting()) {
+            state.setToolState('none');
+            dom.selectBtn.classList.remove('active');
+            clearSelection();
+        } else {
+            state.setToolState('select');
+            dom.selectBtn.classList.add('active');
+            dom.drawBtn.classList.remove('active');
+            dom.eraseBtn.classList.remove('active');
+            dom.textBtn.classList.remove('active');
+            dom.fillBtn.classList.remove('active');
             dom.panBtn.classList.remove('active');
             setPanMode(false);
             exitTextModeVisuals();
@@ -444,6 +478,11 @@ export function initializeCanvasEventListeners(): void {
             state.setIsMouseDown(false);
             return;
         }
+        
+        if (state.isSelecting()) {
+            startSelection(cell.row, cell.col);
+            return;
+        }
 
         if (state.isDrawing() || state.isErasing() || state.isFilling() || (state.isBlinkEnabled() && !state.isDrawing())) {
             // Save history at start of drag operation
@@ -496,6 +535,8 @@ export function initializeCanvasEventListeners(): void {
 
         if (state.isDrawing() || state.isErasing() || (state.isBlinkEnabled() && !state.isDrawing())) {
             applyDrawing(cell.row, cell.col);
+        } else if (state.isSelecting()) {
+            updateSelection(cell.row, cell.col);
         }
     });
 
@@ -504,6 +545,8 @@ export function initializeCanvasEventListeners(): void {
             endResize();
         } else if (isPanMode()) {
             endPan();
+        } else if (state.isSelecting()) {
+            endSelection();
         }
         state.setIsMouseDown(false);
     });
@@ -549,9 +592,20 @@ export function initializeCanvasEventListeners(): void {
             case 'Enter': nextRow++; nextCol = 0; break;
             case 'Home': nextCol = 0; break;
             case 'End': nextCol = state.getGridCols() - 1; break;
+            case 'Escape':
+                state.setToolState('none');
+                dom.textBtn.classList.remove('active');
+                exitTextModeVisuals();
+                return;
 
             default:
                 if (e.key.length === 1 && !e.ctrlKey && !e.altKey && !e.metaKey) {
+                    // Check if we have a selection for text wrapping
+                    if (state.hasSelection()) {
+                        typeInSelection(e.key);
+                        return;
+                    }
+                    
                     const charCode = e.key.charCodeAt(0);
 
                     if (charCode >= 0 && charCode <= 255) {
@@ -649,6 +703,10 @@ export function initializeCanvasEventListeners(): void {
                     e.preventDefault();
                     dom.fillBtn.click();
                     break;
+                case 's':
+                    e.preventDefault();
+                    dom.selectBtn.click();
+                    break;
                 case 'p':
                     e.preventDefault();
                     dom.panBtn.click();
@@ -656,6 +714,28 @@ export function initializeCanvasEventListeners(): void {
                 case 'b':
                     e.preventDefault();
                     dom.blinkBtn.click();
+                    break;
+                case 'escape':
+                    e.preventDefault();
+                    // Untoggle active tools
+                    if (state.isDrawing()) {
+                        state.setToolState('none');
+                        dom.drawBtn.classList.remove('active');
+                    } else if (state.isErasing()) {
+                        state.setToolState('none');
+                        dom.eraseBtn.classList.remove('active');
+                    } else if (state.isTextMode()) {
+                        state.setToolState('none');
+                        dom.textBtn.classList.remove('active');
+                        exitTextModeVisuals();
+                    } else if (state.isSelecting()) {
+                        state.setToolState('none');
+                        dom.selectBtn.classList.remove('active');
+                        clearSelection();
+                    } else if (state.isBlinkEnabled()) {
+                        state.setIsBlinkEnabled(false);
+                        dom.blinkBtn.classList.remove('active');
+                    }
                     break;
             }
         }
