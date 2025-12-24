@@ -230,9 +230,6 @@ echo [!] LINKING FAILED
 goto end
 
 :end
-echo.
-echo =================================
-echo Program finished. 
 pause
 `;
 

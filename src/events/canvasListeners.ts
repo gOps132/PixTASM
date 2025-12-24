@@ -12,7 +12,7 @@ import { encodeCellData, decodeCellData } from '../color';
 import { runTASMCode, stopDosEmulator, preloadDosEmulator } from '../emulator/dosEmulator';
 import { getSavesList, saveProject, deleteProject } from '../storage/saveLoad';
 import { copyShareURL, loadFromURL } from '../sharing/share';
-import type { CellContent } from '../types';
+import { copyASCII, pasteASCII, cutSelection } from '../ascii/copyPaste';
 
 export function initializeCanvasEventListeners(): void {
     const canvas = getCanvas();
@@ -680,6 +680,18 @@ export function initializeCanvasEventListeners(): void {
                 case 's':
                     e.preventDefault();
                     dom.saveBtn.click();
+                    break;
+                case 'c':
+                    e.preventDefault();
+                    copyASCII();
+                    break;
+                case 'v':
+                    e.preventDefault();
+                    pasteASCII();
+                    break;
+                case 'x':
+                    e.preventDefault();
+                    cutSelection();
                     break;
             }
         } else if (e.key === 'Backspace' && (e.ctrlKey || e.metaKey)) {

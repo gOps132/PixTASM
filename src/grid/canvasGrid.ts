@@ -51,6 +51,13 @@ let selectionStart: { row: number; col: number } | null = null;
 let selectionEnd: { row: number; col: number } | null = null;
 /** Whether currently making a selection */
 let isSelecting: boolean = false;
+/** Whether currently dragging a selection */
+let isDraggingSelection: boolean = false;
+/** Original selection data being dragged */
+let draggedSelectionData: (CellContent | null)[][] = [];
+/** Drag offset from selection start */
+let dragOffsetRow: number = 0;
+let dragOffsetCol: number = 0;
 
 /** Undo history stack */
 let undoStack: (CellContent | null)[][][] = [];
@@ -644,6 +651,12 @@ export function isResizeMode(): boolean {
 }
 
 export function startSelection(row: number, col: number): void {
+    // Check if clicking inside existing selection to start drag
+    if (state.hasSelection() && isInSelection(row, col)) {
+        startSelectionDrag(row, col);
+        return;
+    }
+    
     selectionStart = { row, col };
     selectionEnd = { row, col };
     isSelecting = true;
@@ -651,6 +664,11 @@ export function startSelection(row: number, col: number): void {
 }
 
 export function updateSelection(row: number, col: number): void {
+    if (isDraggingSelection) {
+        updateSelectionDrag(row, col);
+        return;
+    }
+    
     if (isSelecting && selectionStart) {
         selectionEnd = { row, col };
         renderGrid();
@@ -658,6 +676,11 @@ export function updateSelection(row: number, col: number): void {
 }
 
 export function endSelection(): void {
+    if (isDraggingSelection) {
+        endSelectionDrag();
+        return;
+    }
+    
     isSelecting = false;
     if (selectionStart && selectionEnd) {
         state.setSelection(selectionStart, selectionEnd);
@@ -800,6 +823,96 @@ export function exitTextModeVisuals(): void {
         activeRow = -1;
         activeCol = -1;
     }
+}
+
+function startSelectionDrag(row: number, col: number): void {
+    const start = state.getSelectionStart()!;
+    const end = state.getSelectionEnd()!;
+    
+    dragOffsetRow = row - Math.min(start.row, end.row);
+    dragOffsetCol = col - Math.min(start.col, end.col);
+    
+    // Store selection data
+    const gridData = state.getGridData();
+    const minRow = Math.min(start.row, end.row);
+    const maxRow = Math.max(start.row, end.row);
+    const minCol = Math.min(start.col, end.col);
+    const maxCol = Math.max(start.col, end.col);
+    
+    draggedSelectionData = [];
+    for (let r = minRow; r <= maxRow; r++) {
+        const rowData: (CellContent | null)[] = [];
+        for (let c = minCol; c <= maxCol; c++) {
+            const cell = gridData[r][c];
+            rowData.push(cell ? { charCode: cell.charCode, attribute: cell.attribute } : null);
+        }
+        draggedSelectionData.push(rowData);
+    }
+    
+    isDraggingSelection = true;
+    canvas.style.cursor = 'move';
+}
+
+function updateSelectionDrag(row: number, col: number): void {
+    const newStartRow = row - dragOffsetRow;
+    const newStartCol = col - dragOffsetCol;
+    
+    const selectionHeight = draggedSelectionData.length;
+    const selectionWidth = draggedSelectionData[0]?.length || 0;
+    
+    selectionStart = { row: newStartRow, col: newStartCol };
+    selectionEnd = { row: newStartRow + selectionHeight - 1, col: newStartCol + selectionWidth - 1 };
+    
+    renderGrid();
+}
+
+function endSelectionDrag(): void {
+    if (!isDraggingSelection) return;
+    
+    const gridData = state.getGridData();
+    const originalStart = state.getSelectionStart()!;
+    const originalEnd = state.getSelectionEnd()!;
+    
+    // Clear original selection area
+    const origMinRow = Math.min(originalStart.row, originalEnd.row);
+    const origMaxRow = Math.max(originalStart.row, originalEnd.row);
+    const origMinCol = Math.min(originalStart.col, originalEnd.col);
+    const origMaxCol = Math.max(originalStart.col, originalEnd.col);
+    
+    saveToHistory();
+    
+    for (let r = origMinRow; r <= origMaxRow; r++) {
+        for (let c = origMinCol; c <= origMaxCol; c++) {
+            gridData[r][c] = null;
+        }
+    }
+    
+    // Place selection at new location
+    const newStartRow = selectionStart!.row;
+    const newStartCol = selectionStart!.col;
+    
+    for (let r = 0; r < draggedSelectionData.length; r++) {
+        for (let c = 0; c < draggedSelectionData[r].length; c++) {
+            const targetRow = newStartRow + r;
+            const targetCol = newStartCol + c;
+            
+            if (targetRow >= 0 && targetRow < state.getGridRows() && 
+                targetCol >= 0 && targetCol < state.getGridCols()) {
+                gridData[targetRow][targetCol] = draggedSelectionData[r][c];
+            }
+        }
+    }
+    
+    // Update selection state
+    state.setSelection(selectionStart!, selectionEnd!);
+    
+    isDraggingSelection = false;
+    draggedSelectionData = [];
+    canvas.style.cursor = 'crosshair';
+    
+    state.setGridData(gridData);
+    renderGrid();
+    saveGridState(state.getGridRows(), state.getGridCols(), gridData);
 }
 
 function startBlinkAnimation(): void {
