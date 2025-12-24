@@ -30,7 +30,9 @@ async function initializeApplication(): Promise<void> {
     createGrid(state.getGridRows(), state.getGridCols());
 
     // Check for shared project in URL
-    if (!(await loadFromURL())) {
+    const loadedFromURL = await loadFromURL();
+    
+    if (!loadedFromURL) {
         // Only create color panels if no shared project was loaded
         createColorPanel(
             bgColorPanel,
@@ -47,6 +49,8 @@ async function initializeApplication(): Promise<void> {
             (selectedIndex) => state.setCurrentFgIndex(selectedIndex),
             'fg'
         );
+        
+        initializeProjectSystem();
     } else {
         // Recreate color panels for shared project
         createColorPanel(
@@ -67,7 +71,6 @@ async function initializeApplication(): Promise<void> {
     }
 
     initializeCanvasEventListeners();
-    initializeProjectSystem();
 }
 
 initializeApplication();

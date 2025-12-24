@@ -58,6 +58,10 @@ export async function generateShareURL(): Promise<string> {
     const gridData = state.getGridData();
     const compressedCells: number[] = [];
     
+    console.log('Sharing project:', state.getCurrentProjectName());
+    console.log('Grid dimensions:', state.getGridRows(), 'x', state.getGridCols());
+    console.log('Grid data sample:', gridData[0]?.[0]);
+    
     // Ultra-compressed format: pack multiple values into single numbers
     for (let row = 0; row < gridData.length; row++) {
         for (let col = 0; col < gridData[row].length; col++) {
@@ -71,14 +75,16 @@ export async function generateShareURL(): Promise<string> {
     }
     
     const projectData = {
-        n: state.getCurrentProjectName().slice(0, 20), // Limit name length
+        n: state.getCurrentProjectName(), // Don't limit name length
         r: state.getGridRows(),
         c: state.getGridCols(),
         d: compressedCells
     };
     
-    // Convert to minimal JSON then compress with LZString-like algorithm
-    const jsonStr = JSON.stringify(projectData).replace(/"([^"]+)":/g, '$1:');
+    console.log('Project data being shared:', projectData);
+    
+    // Convert to JSON and compress
+    const jsonStr = JSON.stringify(projectData);
     const compressed = compressString(jsonStr);
     const encoded = btoa(compressed);
     const baseURL = window.location.origin + window.location.pathname;
@@ -183,34 +189,16 @@ export async function loadFromURL(): Promise<boolean> {
     }
     
     // Check for unsaved changes before loading shared project
-    if (state.hasUnsavedChanges()) {
+    if (state.hasUnsavedChanges() && state.getCurrentProjectName() !== 'Untitled Project') {
         const save = confirm(`You have unsaved changes in "${state.getCurrentProjectName()}". Save before loading shared project?`);
         if (save) {
-            // Try to save current project first
-            const currentProject = state.getCurrentProjectName();
-            if (currentProject !== 'Untitled Project') {
-                try {
-                    const { saveProject } = await import('../storage/saveLoad');
-                    saveProject(currentProject);
-                    state.markAsSaved();
-                } catch (error) {
-                    alert('Failed to save current project');
-                    return false;
-                }
-            } else {
-                const saveName = prompt('Enter name for current project:');
-                if (saveName && saveName.trim()) {
-                    try {
-                        const { saveProject } = await import('../storage/saveLoad');
-                        saveProject(saveName.trim());
-                        state.markAsSaved();
-                    } catch (error) {
-                        alert('Failed to save current project');
-                        return false;
-                    }
-                } else {
-                    return false; // User cancelled save
-                }
+            try {
+                const { saveProject } = await import('../storage/saveLoad');
+                saveProject(state.getCurrentProjectName());
+                state.markAsSaved();
+            } catch (error) {
+                alert('Failed to save current project');
+                return false;
             }
         }
     }
@@ -246,6 +234,8 @@ export async function loadFromURL(): Promise<boolean> {
     }
     
     try {
+        console.log(decoded);
+        
         // Support both old and new format
         const rows = decoded.r || decoded.rows;
         const cols = decoded.c || decoded.cols;
@@ -299,10 +289,24 @@ export async function loadFromURL(): Promise<boolean> {
             }
         }
         
-        // Load the shared project (keep current project name)
+        // Load the shared project with original name
         state.setGridDimensions(rows, cols);
         state.setGridData(gridData);
-        // Don't change the project name - keep the current one
+        
+        // Set project name and force UI update
+        if (name && name.trim()) {
+            state.setCurrentProjectName(name.trim());
+        } else {
+            state.setCurrentProjectName('Untitled Project');
+        }
+        
+        // Direct DOM update to ensure title changes
+        const titleElement = document.querySelector('.logo');
+        if (titleElement) {
+            titleElement.textContent = `PixTASM - ${state.getCurrentProjectName()}`;
+        }
+        
+        state.markAsSaved(); // Mark as saved since it's a fresh load
         
         // Update UI
         const rowsInput = document.getElementById('rows-input') as HTMLInputElement;
@@ -326,6 +330,38 @@ export async function loadFromURL(): Promise<boolean> {
  * @brief Copies the share URL to clipboard
  */
 export async function copyShareURL(): Promise<void> {
+    // Check for unsaved changes before sharing
+    if (state.hasUnsavedChanges()) {
+        const save = confirm(`You have unsaved changes in "${state.getCurrentProjectName()}". Save before sharing?`);
+        if (save) {
+            const currentProject = state.getCurrentProjectName();
+            if (currentProject !== 'Untitled Project') {
+                try {
+                    const { saveProject } = await import('../storage/saveLoad');
+                    saveProject(currentProject);
+                    state.markAsSaved();
+                } catch (error) {
+                    alert('Failed to save current project');
+                    return;
+                }
+            } else {
+                const saveName = prompt('Enter name for current project:');
+                if (saveName && saveName.trim()) {
+                    try {
+                        const { saveProject } = await import('../storage/saveLoad');
+                        saveProject(saveName.trim());
+                        state.markAsSaved();
+                    } catch (error) {
+                        alert('Failed to save current project');
+                        return;
+                    }
+                } else {
+                    return; // User cancelled save
+                }
+            }
+        }
+    }
+    
     const shareURL = await generateShareURL();
     if (!shareURL) return;
     

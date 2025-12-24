@@ -18,7 +18,12 @@ let _currentFgIndex: number | null = 7;
 let _isBlinkEnabled: boolean = false;
 let _gridData: (CellContent | null)[][] = [];
 let _currentProjectName: string = 'Untitled Project';
-let _hasUnsavedChanges: boolean = false;
+let _savedProjectState: {
+    name: string;
+    rows: number;
+    cols: number;
+    gridData: (CellContent | null)[][];
+} | null = null;
 
 // --- Getters (Exported) ---
 // These functions provide read-only access to the state.
@@ -37,7 +42,31 @@ export const getCurrentFgIndex = (): number | null => _currentFgIndex;
 export const isBlinkEnabled = (): boolean => _isBlinkEnabled;
 export const getGridData = (): (CellContent | null)[][] => _gridData;
 export const getCurrentProjectName = (): string => _currentProjectName;
-export const hasUnsavedChanges = (): boolean => _hasUnsavedChanges;
+export const hasUnsavedChanges = (): boolean => {
+    if (!_savedProjectState) return true;
+    
+    // Compare current state with saved state
+    if (_currentProjectName !== _savedProjectState.name ||
+        _gridRows !== _savedProjectState.rows ||
+        _gridCols !== _savedProjectState.cols) {
+        return true;
+    }
+    
+    // Deep compare grid data
+    for (let i = 0; i < _gridRows; i++) {
+        for (let j = 0; j < _gridCols; j++) {
+            const current = _gridData[i]?.[j];
+            const saved = _savedProjectState.gridData[i]?.[j];
+            
+            if (current?.charCode !== saved?.charCode ||
+                current?.attribute !== saved?.attribute) {
+                return true;
+            }
+        }
+    }
+    
+    return false;
+};
 
 // --- Setters / Mutations (Exported) ---
 // These functions are the ONLY way to modify the state.
@@ -65,17 +94,22 @@ export function setIsBlinkEnabled(value: boolean): void {
 
 export function setGridData(data: (CellContent | null)[][]): void {
     _gridData = data;
-    _hasUnsavedChanges = true;
 }
 
 export function setCurrentProjectName(name: string): void {
     _currentProjectName = name;
-    _hasUnsavedChanges = false; // Reset when switching projects
     updateProjectNameDisplay();
 }
 
 export function markAsSaved(): void {
-    _hasUnsavedChanges = false;
+    _savedProjectState = {
+        name: _currentProjectName,
+        rows: _gridRows,
+        cols: _gridCols,
+        gridData: _gridData.map(row => row.map(cell => 
+            cell ? { charCode: cell.charCode, attribute: cell.attribute } : null
+        ))
+    };
 }
 
 function updateProjectNameDisplay(): void {
